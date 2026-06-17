@@ -1,0 +1,310 @@
+const pool = require('../config/database');
+const { redis } = require('../config/redis');
+const { v4: uuidv4 } = require('uuid');
+
+const VALID_RIDER_STATUSES = ['pending', 'verified', 'suspended', 'rejected'];
+const PLATE_REGEX = /^UG[A-Z]{2,3}\s?\d{3,4}[A-Z]?$/;
+
+const registerRider = async (req, reply) => {
+  try {
+    const { phone, name, national_id, plate_number, id_photo, selfie_photo } = req.body;
+
+    if (!phone || !name || !national_id || !plate_number) {
+      return reply.status(400).send({ error: 'Missing required fields: phone, name, national_id, plate_number' });
+    }
+
+    if (!/^256\d{9}$/.test(phone)) {
+      return reply.status(400).send({ error: 'Invalid phone format. Use 256XXXXXXXXX' });
+    }
+
+    if (!PLATE_REGEX.test(plate_number.replace(/\s/g, ''))) {
+      return reply.status(400).send({ error: 'Invalid plate number format. Expected: UGXXX 1234A' });
+    }
+
+    if (name.length < 2 || name.length > 100) {
+      return reply.status(400).send({ error: 'Name must be 2-100 characters' });
+    }
+
+    const existing = await pool.query(
+      'SELECT id FROM riders WHERE national_id = $1 OR phone = $2',
+      [national_id, phone]
+    );
+
+    if (existing.rows.length > 0) {
+      return reply.status(409).send({ error: 'Rider with this ID or phone already exists' });
+    }
+
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO riders (id, phone, name, national_id, plate_number, id_photo, selfie_photo, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')`,
+      [id, phone, name, national_id, plate_number, id_photo || null, selfie_photo || null]
+    );
+
+    return reply.status(201).send({
+      success: true,
+      riderId: id,
+      status: 'pending',
+      message: 'Registration submitted. Await admin verification.',
+    });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to register rider' });
+  }
+};
+
+const getNearbyRiders = async (req, reply) => {
+  try {
+    const { lat, lng, radius = 3 } = req.query;
+
+    if (!lat || !lng) {
+      return reply.status(400).send({ error: 'Latitude and longitude required' });
+    }
+
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    const radiusNum = parseFloat(radius);
+
+    if (isNaN(latNum) || isNaN(lngNum) || isNaN(radiusNum)) {
+      return reply.status(400).send({ error: 'Invalid coordinates or radius' });
+    }
+
+    if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
+      return reply.status(400).send({ error: 'Coordinates out of range' });
+    }
+
+    if (radiusNum < 0.1 || radiusNum > 50) {
+      return reply.status(400).send({ error: 'Radius must be between 0.1 and 50 km' });
+    }
+
+    const cachedKey = `nearby:${Math.round(latNum * 100)}:${Math.round(lngNum * 100)}`;
+    const cached = await redis.get(cachedKey);
+    if (cached) {
+      return reply.send({ riders: JSON.parse(cached), cached: true });
+    }
+
+    const result = await pool.query(
+      `SELECT id, name, phone, plate_number, current_lat, current_lng, avg_rating, total_trips, selfie_photo
+       FROM riders
+       WHERE status = 'verified'
+         AND is_online = true
+         AND current_lat IS NOT NULL
+         AND current_lng IS NOT NULL
+         AND ST_Distance(
+           ST_SetSRID(ST_MakePoint(current_lng, current_lat), 4326)::geography,
+           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+         ) <= $3 * 1000
+       ORDER BY avg_rating DESC, total_trips DESC
+       LIMIT 20`,
+      [lngNum, latNum, radiusNum]
+    );
+
+    await redis.setEx(cachedKey, 30, JSON.stringify(result.rows));
+
+    return reply.send({ riders: result.rows, cached: false });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to find nearby riders' });
+  }
+};
+
+const updateLocation = async (req, reply) => {
+  try {
+    const { riderId } = req.params;
+    const { lat, lng } = req.body;
+
+    if (!lat || !lng) {
+      return reply.status(400).send({ error: 'Latitude and longitude required' });
+    }
+
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      return reply.status(400).send({ error: 'Invalid coordinates' });
+    }
+
+    if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
+      return reply.status(400).send({ error: 'Coordinates out of range' });
+    }
+
+    const result = await pool.query(
+      `UPDATE riders SET current_lat = $1, current_lng = $2
+       WHERE id = $3 AND status = 'verified'
+       RETURNING id, current_lat, current_lng`,
+      [latNum, lngNum, riderId]
+    );
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Rider not found or not verified' });
+    }
+
+    await redis.hSet('riders:locations', riderId, JSON.stringify({
+      lat: latNum,
+      lng: lngNum,
+      updatedAt: Date.now(),
+    }));
+
+    return reply.send({ success: true, location: result.rows[0] });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to update location' });
+  }
+};
+
+const toggleOnline = async (req, reply) => {
+  try {
+    const { riderId } = req.params;
+    const { is_online } = req.body;
+
+    if (typeof is_online !== 'boolean') {
+      return reply.status(400).send({ error: 'is_online must be a boolean' });
+    }
+
+    const result = await pool.query(
+      `UPDATE riders SET is_online = $1
+       WHERE id = $2 AND status = 'verified'
+       RETURNING id, is_online`,
+      [is_online, riderId]
+    );
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Rider not found or not verified' });
+    }
+
+    if (!is_online) {
+      await redis.hDel('riders:online', riderId);
+    }
+
+    return reply.send({ success: true, is_online: result.rows[0].is_online });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to toggle online status' });
+  }
+};
+
+const getRiderProfile = async (req, reply) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT id, name, phone, plate_number, avg_rating, total_trips, status, selfie_photo, created_at
+       FROM riders WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Rider not found' });
+    }
+
+    const ratings = await pool.query(
+      `SELECT r.score, r.comment, r.created_at, u.phone as rated_by
+       FROM ratings r
+       LEFT JOIN users u ON u.id = r.rated_by
+       WHERE r.rider_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT 10`,
+      [id]
+    );
+
+    return reply.send({
+      rider: result.rows[0],
+      recent_ratings: ratings.rows,
+    });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to get rider profile' });
+  }
+};
+
+const getRiderEarnings = async (req, reply) => {
+  try {
+    const { riderId } = req.params;
+    const { period = 'all' } = req.query;
+
+    let dateFilter = '';
+    const params = [riderId];
+
+    if (period === 'today') {
+      dateFilter = 'AND b.completed_at >= CURRENT_DATE';
+    } else if (period === 'week') {
+      dateFilter = 'AND b.completed_at >= CURRENT_DATE - INTERVAL \'7 days\'';
+    } else if (period === 'month') {
+      dateFilter = 'AND b.completed_at >= CURRENT_DATE - INTERVAL \'30 days\'';
+    }
+
+    const result = await pool.query(
+      `SELECT b.id, b.fare_final, b.completed_at, b.type, b.pickup_address, b.dropoff_address
+       FROM bookings b
+       WHERE b.rider_id = $1 AND b.status = 'completed' ${dateFilter}
+       ORDER BY b.completed_at DESC
+       LIMIT 100`,
+      params
+    );
+
+    const totalEarnings = result.rows.reduce((sum, b) => sum + (b.fare_final || 0), 0);
+    const riderShare = Math.floor(totalEarnings * 0.85);
+    const platformFee = totalEarnings - riderShare;
+
+    const stats = await pool.query(
+      `SELECT
+         COUNT(*) as total_trips,
+         COALESCE(SUM(fare_final), 0) as total_revenue,
+         COALESCE(AVG(fare_final), 0) as avg_fare,
+         COALESCE(MAX(fare_final), 0) as highest_fare
+       FROM bookings
+       WHERE rider_id = $1 AND status = 'completed' ${dateFilter}`,
+      params
+    );
+
+    return reply.send({
+      bookings: result.rows,
+      summary: {
+        total_trips: parseInt(stats.rows[0].total_trips),
+        total_revenue: parseInt(stats.rows[0].total_revenue),
+        rider_share: Math.floor(parseInt(stats.rows[0].total_revenue) * 0.85),
+        platform_fee: parseInt(stats.rows[0].total_revenue) - Math.floor(parseInt(stats.rows[0].total_revenue) * 0.85),
+        avg_fare: Math.round(parseFloat(stats.rows[0].avg_fare)),
+        highest_fare: parseInt(stats.rows[0].highest_fare),
+      },
+    });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to get earnings' });
+  }
+};
+
+const updateRiderDocuments = async (req, reply) => {
+  try {
+    const { riderId } = req.params;
+    const { id_photo, selfie_photo } = req.body;
+
+    const result = await pool.query(
+      `UPDATE riders
+       SET id_photo = COALESCE($1, id_photo),
+           selfie_photo = COALESCE($2, selfie_photo)
+       WHERE id = $3 AND status = 'pending'
+       RETURNING id, id_photo, selfie_photo`,
+      [id_photo, selfie_photo, riderId]
+    );
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Rider not found or already processed' });
+    }
+
+    return reply.send({ success: true, documents: result.rows[0] });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to update documents' });
+  }
+};
+
+module.exports = {
+  registerRider,
+  getNearbyRiders,
+  updateLocation,
+  toggleOnline,
+  getRiderProfile,
+  getRiderEarnings,
+  updateRiderDocuments,
+};

@@ -1,0 +1,64 @@
+import { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authAPI, riderAPI } from '../services/api';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [rider, setRider] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadRider();
+  }, []);
+
+  const loadRider = async () => {
+    try {
+      const token = await AsyncStorage.getItem('rider_token');
+      const riderData = await AsyncStorage.getItem('rider_data');
+      if (token && riderData) {
+        setRider({ token, ...JSON.parse(riderData) });
+      }
+    } catch (err) {
+      console.error('Failed to load rider:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendOTP = async (phone) => {
+    await authAPI.sendOTP(phone);
+  };
+
+  const verifyOTP = async (phone, otp) => {
+    const { data } = await authAPI.verifyOTP(phone, otp);
+    await AsyncStorage.setItem('rider_token', data.token);
+
+    const riderData = { id: data.user?.id, phone, ...data.user };
+    await AsyncStorage.setItem('rider_data', JSON.stringify(riderData));
+
+    setRider({ token: data.token, ...riderData });
+    return data;
+  };
+
+  const register = async (riderData) => {
+    const { data } = await riderAPI.register(riderData);
+    const updatedRider = { ...rider, riderId: data.riderId, status: data.status };
+    await AsyncStorage.setItem('rider_data', JSON.stringify(updatedRider));
+    setRider(updatedRider);
+    return data;
+  };
+
+  const logout = async () => {
+    await AsyncStorage.multiRemove(['rider_token', 'rider_data']);
+    setRider(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ rider, loading, sendOTP, verifyOTP, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export const useAuth = () => useContext(AuthContext);
