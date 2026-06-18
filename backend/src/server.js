@@ -11,11 +11,26 @@ const authRoutes = require('./routes/auth');
 const riderRoutes = require('./routes/riders');
 const bookingRoutes = require('./routes/bookings');
 const adminRoutes = require('./routes/admin');
+const supportRoutes = require('./routes/support');
+const settingsRoutes = require('./routes/settings');
+const notificationRoutes = require('./routes/notifications');
 const { authenticateToken, requireRole } = require('./middleware/auth');
+const jwt = require('jsonwebtoken');
 
 const start = async () => {
   try {
-    await fastify.register(cors, { origin: true });
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+      throw new Error('JWT_SECRET must be at least 32 characters');
+    }
+    if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET.length < 32) {
+      throw new Error('JWT_REFRESH_SECRET must be at least 32 characters');
+    }
+
+    await fastify.register(cors, {
+      origin: ['https://admin.ocaya.space', 'http://localhost:5173', 'http://localhost:3000'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    });
 
     const pubClient = redis;
     const subClient = redis.duplicate();
@@ -24,10 +39,27 @@ const start = async () => {
     const io = new Server(fastify.server, { cors: { origin: '*' } });
     io.adapter(createAdapter(pubClient, subClient));
 
+    io.use((socket, next) => {
+      const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+      if (!token) return next(new Error('Authentication required'));
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = decoded.userId;
+        socket.userRole = decoded.role;
+        socket.userPhone = decoded.phone;
+        next();
+      } catch (err) {
+        next(new Error('Invalid token'));
+      }
+    });
+
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
 
       socket.on('rider:location', async ({ riderId, lat, lng, bookingId }) => {
+        if (socket.userRole !== 'rider' && socket.userRole !== 'admin') return;
+        if (socket.userRole === 'rider' && socket.userId !== riderId) return;
+
         await redis.hSet('riders:online', riderId, JSON.stringify({ lat, lng, updatedAt: Date.now() }));
 
         if (bookingId) {
@@ -35,8 +67,16 @@ const start = async () => {
         }
       });
 
-      socket.on('join:booking', ({ bookingId }) => {
-        socket.join(`booking:${bookingId}`);
+      socket.on('join:booking', async ({ bookingId }) => {
+        const booking = await pool.query(
+          'SELECT customer_id, rider_id FROM bookings WHERE id = $1', [bookingId]
+        );
+        if (booking.rows.length === 0) return;
+
+        const b = booking.rows[0];
+        if (socket.userRole === 'admin' || socket.userId === b.customer_id || socket.userId === b.rider_id) {
+          socket.join(`booking:${bookingId}`);
+        }
       });
 
       socket.on('disconnect', () => {
@@ -49,6 +89,7 @@ const start = async () => {
     fastify.post('/auth/send-otp', authRoutes.sendOTP);
     fastify.post('/auth/verify-otp', authRoutes.verifyOTP);
     fastify.post('/auth/refresh', authRoutes.refreshAccessToken);
+    fastify.post('/auth/logout', authRoutes.logout);
 
     fastify.post('/riders/register', riderRoutes.registerRider);
     fastify.get('/riders/nearby', { preHandler: authenticateToken }, riderRoutes.getNearbyRiders);
@@ -75,11 +116,28 @@ const start = async () => {
     fastify.patch('/admin/riders/:id/verify', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.verifyRider);
     fastify.patch('/admin/riders/:id/suspend', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.suspendRider);
     fastify.patch('/admin/riders/:id/reinstate', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.reinstateRider);
+    fastify.delete('/admin/riders/:id', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.deleteRider);
     fastify.get('/admin/bookings', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.getAllBookings);
     fastify.get('/admin/bookings/:id', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.getBookingDetails);
     fastify.get('/admin/payments', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.getPayments);
     fastify.post('/admin/payments/:id/release', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.releasePayment);
     fastify.post('/admin/payments/:id/flag', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.flagPayment);
+
+    fastify.get('/admin/support/tickets', { preHandler: [authenticateToken, requireRole(['admin'])] }, supportRoutes.getTickets);
+    fastify.get('/admin/support/tickets/:id', { preHandler: [authenticateToken, requireRole(['admin'])] }, supportRoutes.getTicketDetails);
+    fastify.post('/admin/support/tickets', { preHandler: [authenticateToken, requireRole(['admin'])] }, supportRoutes.createTicket);
+    fastify.patch('/admin/support/tickets/:id/status', { preHandler: [authenticateToken, requireRole(['admin'])] }, supportRoutes.updateTicketStatus);
+    fastify.post('/admin/support/tickets/:id/messages', { preHandler: [authenticateToken, requireRole(['admin'])] }, supportRoutes.addTicketMessage);
+
+    fastify.get('/admin/settings', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.getSettings);
+    fastify.put('/admin/settings', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.updateSettings);
+    fastify.get('/admin/profile', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.getProfile);
+    fastify.put('/admin/profile', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.updateProfile);
+
+    fastify.get('/admin/notifications', { preHandler: [authenticateToken, requireRole(['admin'])] }, notificationRoutes.getNotifications);
+    fastify.patch('/admin/notifications/:id/read', { preHandler: [authenticateToken, requireRole(['admin'])] }, notificationRoutes.markAsRead);
+    fastify.patch('/admin/notifications/read-all', { preHandler: [authenticateToken, requireRole(['admin'])] }, notificationRoutes.markAllAsRead);
+    fastify.delete('/admin/notifications/:id', { preHandler: [authenticateToken, requireRole(['admin'])] }, notificationRoutes.deleteNotification);
 
     await fastify.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' });
     console.log(`Server running on port ${process.env.PORT || 3000}`);

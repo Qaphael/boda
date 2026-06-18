@@ -22,12 +22,22 @@ export function AuthProvider({ children }) {
   const verifyOTP = async (phone, otp) => {
     const { data } = await authAPI.verifyOTP(phone, otp);
     localStorage.setItem('admin_token', data.token);
+    if (data.refreshToken) {
+      localStorage.setItem('admin_refresh_token', data.refreshToken);
+    }
     setUser({ token: data.token, ...data.user });
     return data;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const refreshToken = localStorage.getItem('admin_refresh_token');
+    try {
+      await authAPI.logout(refreshToken);
+    } catch (err) {
+      // Ignore logout API errors
+    }
     localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_refresh_token');
     setUser(null);
   };
 

@@ -1,0 +1,7 @@
+INSERT INTO notifications (admin_id, type, title, message, entity_type, entity_id, action_url, is_read, created_at) VALUES
+  ((SELECT user_id FROM admins LIMIT 1), 'rider_approved', 'Rider Approved', 'Kevin Otieno has been approved and can now go online', 'rider', 'b1000000-0000-0000-0000-000000000001', '/riders', true, NOW() - INTERVAL '2 hours'),
+  ((SELECT user_id FROM admins LIMIT 1), 'payment_flagged', 'Payment Flagged', 'Payment d1000000... flagged for review - suspicious amount', 'payment', 'd1000000-0000-0000-0000-000000000013', '/payments', false, NOW() - INTERVAL '1 hour'),
+  ((SELECT user_id FROM admins LIMIT 1), 'rider_suspended', 'Rider Suspended', 'Michael Otieno has been suspended for policy violation', 'rider', 'b1000000-0000-0000-0000-000000000009', '/riders', false, NOW() - INTERVAL '30 minutes'),
+  ((SELECT user_id FROM admins LIMIT 1), 'rider_approved', 'Rider Approved', 'Sarah Mwangi has been approved and can now go online', 'rider', 'b1000000-0000-0000-0000-000000000002', '/riders', true, NOW() - INTERVAL '1 day'),
+  ((SELECT user_id FROM admins LIMIT 1), 'ticket_created', 'New Support Ticket', 'Payment failure at Gulu Main Gate - urgent priority', 'ticket', NULL, '/support', false, NOW() - INTERVAL '3 hours'),
+  ((SELECT user_id FROM admins LIMIT 1), 'payment_flagged', 'Payment Flagged', 'Payment d1000000... flagged - customer dispute', 'payment', 'd1000000-0000-0000-0000-000000000016', '/payments', true, NOW() - INTERVAL '2 days');

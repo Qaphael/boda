@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const OTP_EXPIRY = 5 * 60; // 5 minutes in seconds
 const OTP_LENGTH = 6;
 const MAX_OTP_ATTEMPTS = 3;
+const MAX_OTP_ATTEMPTS_PER_IP = 10;
+const MAX_VERIFY_ATTEMPTS = 5;
 
 const sendOTP = async (req, reply) => {
   try {
@@ -24,11 +26,20 @@ const sendOTP = async (req, reply) => {
       return reply.status(429).send({ error: 'Too many OTP requests. Wait 5 minutes.' });
     }
 
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const ipRateLimitKey = `otp:ratelimit:ip:${ip}`;
+    const ipAttempts = await redis.get(ipRateLimitKey);
+    if (ipAttempts && parseInt(ipAttempts) >= MAX_OTP_ATTEMPTS_PER_IP) {
+      return reply.status(429).send({ error: 'Too many requests from this IP. Try again later.' });
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await redis.setEx(`otp:${phone}`, OTP_EXPIRY, otp);
     await redis.incr(rateLimitKey);
     await redis.expire(rateLimitKey, OTP_EXPIRY);
+    await redis.incr(ipRateLimitKey);
+    await redis.expire(ipRateLimitKey, OTP_EXPIRY);
 
     console.log(`[DEV] OTP for ${phone}: ${otp}`);
 
@@ -50,18 +61,29 @@ const verifyOTP = async (req, reply) => {
       return reply.status(400).send({ error: 'Phone and OTP required' });
     }
 
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const verifyRateKey = `otp:verify:ratelimit:${phone}`;
+    const verifyAttempts = await redis.get(verifyRateKey);
+    if (verifyAttempts && parseInt(verifyAttempts) >= MAX_VERIFY_ATTEMPTS) {
+      return reply.status(429).send({ error: 'Too many failed attempts. Request a new OTP.' });
+    }
+
     const storedOTP = await redis.get(`otp:${phone}`);
 
     if (!storedOTP) {
-      return reply.status(400).send({ error: 'No OTP found. Request a new one.' });
+      return reply.status(400).send({ error: 'Invalid or expired OTP' });
     }
 
     if (storedOTP !== otp) {
+      await redis.incr(verifyRateKey);
+      await redis.expire(verifyRateKey, OTP_EXPIRY);
       return reply.status(400).send({ error: 'Invalid OTP' });
     }
 
     await redis.del(`otp:${phone}`);
     await redis.del(`otp:ratelimit:${phone}`);
+    await redis.del(`otp:ratelimit:ip:${ip}`);
+    await redis.del(verifyRateKey);
 
     let user = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
 
@@ -123,8 +145,19 @@ const refreshAccessToken = async (req, reply) => {
       return reply.status(403).send({ error: 'Invalid refresh token' });
     }
 
+    const user = await pool.query('SELECT id, phone FROM users WHERE id = $1', [decoded.userId]);
+    if (user.rows.length === 0) {
+      return reply.status(403).send({ error: 'User not found' });
+    }
+
+    const adminCheck = await pool.query(
+      'SELECT id FROM admins WHERE user_id = $1 AND is_active = true',
+      [decoded.userId]
+    );
+    const role = adminCheck.rows.length > 0 ? 'admin' : 'customer';
+
     const newToken = jwt.sign(
-      { userId: decoded.userId, phone: decoded.phone, role: 'customer' },
+      { userId: decoded.userId, phone: decoded.phone, role },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -138,4 +171,21 @@ const refreshAccessToken = async (req, reply) => {
   }
 };
 
-module.exports = { sendOTP, verifyOTP, refreshAccessToken };
+const logout = async (req, reply) => {
+  try {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      try {
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        await redis.del(`session:${decoded.phone}`);
+      } catch (err) {
+        // Token already invalid, ignore
+      }
+    }
+    return reply.send({ success: true, message: 'Logged out' });
+  } catch (err) {
+    return reply.status(500).send({ error: 'Logout failed' });
+  }
+};
+
+module.exports = { sendOTP, verifyOTP, refreshAccessToken, logout };

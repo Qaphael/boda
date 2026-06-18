@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { redis } = require('../config/redis');
+const { notifyAllAdmins } = require('./notifications');
 
 const getDashboardStats = async (req, reply) => {
   try {
@@ -10,7 +11,7 @@ const getDashboardStats = async (req, reply) => {
         COUNT(*) FILTER (WHERE status = 'verified') as verified,
         COUNT(*) FILTER (WHERE status = 'suspended') as suspended,
         COUNT(*) FILTER (WHERE is_online = true) as online
-       FROM riders`),
+       FROM riders WHERE is_deleted = false`),
       pool.query(`SELECT
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'pending') as pending,
@@ -46,15 +47,14 @@ const getPendingRiders = async (req, reply) => {
 
     const result = await pool.query(
       `SELECT id, name, phone, national_id, plate_number, id_photo, selfie_photo, created_at
-       FROM riders WHERE status = 'pending'
+       FROM riders WHERE status = 'pending' AND is_deleted = false
        ORDER BY created_at ASC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
 
     const count = await pool.query(
-      'SELECT COUNT(*) as total FROM riders WHERE status = \'pending\''
-    );
+      'SELECT COUNT(*) as total FROM riders WHERE status = \'pending\' AND is_deleted = false'    );
 
     return reply.send({
       riders: result.rows,
@@ -71,7 +71,7 @@ const getRiderDetails = async (req, reply) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      `SELECT * FROM riders WHERE id = $1`,
+      `SELECT * FROM riders WHERE id = $1 AND is_deleted = false`,
       [id]
     );
 
@@ -138,6 +138,15 @@ const verifyRider = async (req, reply) => {
       rider: result.rows[0],
       message: status === 'verified' ? 'Rider approved and can now go online' : `Rider rejected: ${reason || 'No reason provided'}`,
     });
+
+    await notifyAllAdmins({
+      type: status === 'verified' ? 'rider_approved' : 'rider_rejected',
+      title: `Rider ${status === 'verified' ? 'Approved' : 'Rejected'}`,
+      message: `${result.rows[0].name} has been ${status}`,
+      entityType: 'rider',
+      entityId: id,
+      actionUrl: '/riders',
+    });
   } catch (err) {
     req.log.error(err);
     return reply.status(500).send({ error: 'Failed to verify rider' });
@@ -171,6 +180,15 @@ const suspendRider = async (req, reply) => {
       success: true,
       rider: result.rows[0],
       message: 'Rider suspended and taken offline',
+    });
+
+    await notifyAllAdmins({
+      type: 'rider_suspended',
+      title: 'Rider Suspended',
+      message: `${result.rows[0].name} has been suspended`,
+      entityType: 'rider',
+      entityId: id,
+      actionUrl: '/riders',
     });
   } catch (err) {
     req.log.error(err);
@@ -408,9 +426,49 @@ const flagPayment = async (req, reply) => {
       payment: result.rows[0],
       message: 'Payment flagged for review',
     });
+
+    await notifyAllAdmins({
+      type: 'payment_flagged',
+      title: 'Payment Flagged',
+      message: `Payment ${result.rows[0].id?.slice(0, 8)}... flagged for review`,
+      entityType: 'payment',
+      entityId: id,
+      actionUrl: '/payments',
+    });
   } catch (err) {
     req.log.error(err);
     return reply.status(500).send({ error: 'Failed to flag payment' });
+  }
+};
+
+const deleteRider = async (req, reply) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    const result = await pool.query(
+      `UPDATE riders SET is_deleted = true, status = 'suspended', is_online = false, updated_at = NOW()
+       WHERE id = $1 AND is_deleted = false
+       RETURNING id, name`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Rider not found or already deleted' });
+    }
+
+    await pool.query(
+      `INSERT INTO rider_suspensions (rider_id, reason, suspended_by)
+       VALUES ($1, $2, $3)`,
+      [id, reason || 'Admin deletion', req.user.userId]
+    );
+
+    await redis.hDel('riders:online', id);
+
+    return reply.send({ success: true, message: `Rider ${result.rows[0].name} has been removed` });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to delete rider' });
   }
 };
 
@@ -421,6 +479,7 @@ module.exports = {
   verifyRider,
   suspendRider,
   reinstateRider,
+  deleteRider,
   getAllBookings,
   getBookingDetails,
   getPayments,

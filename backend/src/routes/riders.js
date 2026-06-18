@@ -4,6 +4,26 @@ const { v4: uuidv4 } = require('uuid');
 
 const VALID_RIDER_STATUSES = ['pending', 'verified', 'suspended', 'rejected'];
 const PLATE_REGEX = /^UG[A-Z]{2,3}\s?\d{3,4}[A-Z]?$/;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+const validatePhoto = (photo, fieldName) => {
+  if (!photo) return null;
+  if (typeof photo !== 'string') return `${fieldName} must be a string (base64 or URL)`;
+  if (photo.startsWith('data:')) {
+    const match = photo.match(/^data:([^;]+);/);
+    if (!match) return `${fieldName} has invalid format`;
+    if (!ALLOWED_IMAGE_TYPES.includes(match[1])) return `${fieldName} must be JPEG, PNG, or WebP`;
+    const base64 = photo.split(',')[1];
+    const size = Math.ceil(base64.length * 3 / 4);
+    if (size > MAX_FILE_SIZE) return `${fieldName} exceeds 5MB limit`;
+  } else if (photo.startsWith('http')) {
+    try { new URL(photo); } catch { return `${fieldName} has invalid URL`; }
+  } else {
+    return `${fieldName} must be a data URI or URL`;
+  }
+  return null;
+};
 
 const registerRider = async (req, reply) => {
   try {
@@ -25,13 +45,22 @@ const registerRider = async (req, reply) => {
       return reply.status(400).send({ error: 'Name must be 2-100 characters' });
     }
 
+    const photoErrors = [];
+    const idErr = validatePhoto(id_photo, 'ID photo');
+    if (idErr) photoErrors.push(idErr);
+    const selfieErr = validatePhoto(selfie_photo, 'Selfie photo');
+    if (selfieErr) photoErrors.push(selfieErr);
+    if (photoErrors.length > 0) {
+      return reply.status(400).send({ error: photoErrors.join(', ') });
+    }
+
     const existing = await pool.query(
-      'SELECT id FROM riders WHERE national_id = $1 OR phone = $2',
+      'SELECT id FROM riders WHERE (national_id = $1 OR phone = $2) AND is_deleted = false',
       [national_id, phone]
     );
 
     if (existing.rows.length > 0) {
-      return reply.status(409).send({ error: 'Rider with this ID or phone already exists' });
+      return reply.status(409).send({ error: 'Registration already exists' });
     }
 
     const id = uuidv4();
@@ -88,6 +117,7 @@ const getNearbyRiders = async (req, reply) => {
        FROM riders
        WHERE status = 'verified'
          AND is_online = true
+         AND is_deleted = false
          AND current_lat IS NOT NULL
          AND current_lng IS NOT NULL
          AND ST_Distance(
@@ -110,8 +140,12 @@ const getNearbyRiders = async (req, reply) => {
 
 const updateLocation = async (req, reply) => {
   try {
-    const { riderId } = req.params;
+    const riderId = req.user.riderId;
     const { lat, lng } = req.body;
+
+    if (!riderId) {
+      return reply.status(403).send({ error: 'Only riders can update location' });
+    }
 
     if (!lat || !lng) {
       return reply.status(400).send({ error: 'Latitude and longitude required' });
@@ -154,8 +188,12 @@ const updateLocation = async (req, reply) => {
 
 const toggleOnline = async (req, reply) => {
   try {
-    const { riderId } = req.params;
+    const riderId = req.user.riderId;
     const { is_online } = req.body;
+
+    if (!riderId) {
+      return reply.status(403).send({ error: 'Only riders can toggle online status' });
+    }
 
     if (typeof is_online !== 'boolean') {
       return reply.status(400).send({ error: 'is_online must be a boolean' });
@@ -189,7 +227,7 @@ const getRiderProfile = async (req, reply) => {
 
     const result = await pool.query(
       `SELECT id, name, phone, plate_number, avg_rating, total_trips, status, selfie_photo, created_at
-       FROM riders WHERE id = $1`,
+       FROM riders WHERE id = $1 AND is_deleted = false`,
       [id]
     );
 
@@ -219,8 +257,12 @@ const getRiderProfile = async (req, reply) => {
 
 const getRiderEarnings = async (req, reply) => {
   try {
-    const { riderId } = req.params;
+    const riderId = req.user.riderId;
     const { period = 'all' } = req.query;
+
+    if (!riderId) {
+      return reply.status(403).send({ error: 'Only riders can view earnings' });
+    }
 
     let dateFilter = '';
     const params = [riderId];
@@ -276,8 +318,25 @@ const getRiderEarnings = async (req, reply) => {
 
 const updateRiderDocuments = async (req, reply) => {
   try {
-    const { riderId } = req.params;
+    const riderId = req.user.riderId;
     const { id_photo, selfie_photo } = req.body;
+
+    if (!riderId) {
+      return reply.status(403).send({ error: 'Only riders can update documents' });
+    }
+
+    const photoErrors = [];
+    if (id_photo) {
+      const err = validatePhoto(id_photo, 'ID photo');
+      if (err) photoErrors.push(err);
+    }
+    if (selfie_photo) {
+      const err = validatePhoto(selfie_photo, 'Selfie photo');
+      if (err) photoErrors.push(err);
+    }
+    if (photoErrors.length > 0) {
+      return reply.status(400).send({ error: photoErrors.join(', ') });
+    }
 
     const result = await pool.query(
       `UPDATE riders

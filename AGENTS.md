@@ -34,7 +34,7 @@ D:\code\
 │   │   ├── server.js         # Entry point, route registration
 │   │   ├── schema.sql        # Database schema
 │   │   ├── config/           # database.js, redis.js
-│   │   ├── routes/           # auth.js, riders.js, bookings.js, admin.js
+│   │   ├── routes/           # auth.js, riders.js, bookings.js, admin.js, support.js, settings.js
 │   │   ├── middleware/        # auth.js (JWT + role checking)
 │   │   ├── services/         # paymentService.js
 │   │   └── __tests__/        # Jest tests
@@ -42,6 +42,10 @@ D:\code\
 │   └── .env.example          # Environment variables template
 ├── admin/                    # React + Vite admin dashboard
 │   ├── src/
+│   │   ├── components/       # Layout.jsx (responsive sidebar)
+│   │   ├── pages/            # Login, Dashboard, Riders, Bookings, Payments, Settings, Support
+│   │   ├── context/          # AuthContext.jsx
+│   │   └── services/         # api.js (all admin API calls)
 │   ├── dist/                 # Built output
 │   └── package.json
 ├── customer-app/             # React Native (Expo) customer app
@@ -103,10 +107,26 @@ D:\code\
 - `POST /bookings/:id/rate` — Rate after trip
 
 ### Admin (requires `admin` role)
-- `GET /admin/dashboard` — Dashboard stats
+- `GET /admin/dashboard` — Dashboard stats (riders, bookings, payments, users)
 - `GET /admin/riders/pending` — Pending rider applications
-- `PATCH /admin/riders/:id/verify` — Approve rider
+- `GET /admin/riders/:id` — Rider details + trips + ratings
+- `PATCH /admin/riders/:id/verify` — Approve/reject rider
 - `PATCH /admin/riders/:id/suspend` — Suspend rider
+- `PATCH /admin/riders/:id/reinstate` — Reinstate suspended rider
+- `GET /admin/bookings` — All bookings (filterable by status, type)
+- `GET /admin/bookings/:id` — Booking details + payments + ratings
+- `GET /admin/payments` — All payments (filterable by status)
+- `POST /admin/payments/:id/release` — Release held payment
+- `POST /admin/payments/:id/flag` — Flag suspicious payment
+- `GET /admin/support/tickets` — Support tickets (filterable by status, priority)
+- `GET /admin/support/tickets/:id` — Ticket details + messages
+- `POST /admin/support/tickets` — Create new ticket
+- `PATCH /admin/support/tickets/:id/status` — Update ticket status
+- `POST /admin/support/tickets/:id/messages` — Add reply/note to ticket
+- `GET /admin/settings` — Get all admin settings (grouped by category)
+- `PUT /admin/settings` — Update settings
+- `GET /admin/profile` — Get admin profile
+- `PUT /admin/profile` — Update admin profile
 
 ## Environment Variables
 
@@ -357,6 +377,100 @@ docker exec -it boda-postgres psql -U boda -d boda
 - `payments` — escrow payments (amount, method: mtn/airtel/cash, status)
 - `ratings` — trip ratings (score 1-5, comment)
 - `admins` — admin users (user_id, is_active)
+- `support_tickets` — support tickets (subject, description, priority, category, status, user_id, rider_id)
+- `ticket_messages` — ticket conversation messages (ticket_id, admin_id, message, type)
+- `admin_settings` — platform settings (key, value, category)
+- `rider_rejections` — rejection audit trail
+- `rider_suspensions` — suspension audit trail
+- `payment_flags` — payment flag audit trail
+
+---
+
+## Admin Dashboard Design System
+
+### Stack
+- React 19 + Vite + **Tailwind CSS v4** (uses `@theme` in CSS, NOT `tailwind.config.js`)
+- PostCSS via `@tailwindcss/postcss`
+- React Router DOM v7
+- Axios for API calls
+
+### Design Tokens (in `src/index.css` via `@theme`)
+- **Primary**: `#0050cb` (Hyper Blue)
+- **Surface**: `#fbf8ff` (slightly off-white)
+- **Font**: Geist (from jsdelivr CDN), JetBrains Mono for IDs/currency
+- **Icons**: Material Symbols Outlined (Google Fonts)
+- **Radius**: 2px (sm), 4px (lg), 8px (xl), 12px (full)
+- **Spacing**: 4px base unit
+
+### Tailwind v4 Configuration
+**IMPORTANT**: This project uses Tailwind CSS v4 which configures themes in CSS, not in `tailwind.config.js`. The `tailwind.config.js` file has NO effect. All custom colors must be defined in `src/index.css` using the `@theme` block:
+
+```css
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0050cb;
+  --color-surface: #fbf8ff;
+  /* ... all custom colors ... */
+}
+```
+
+### Typography Classes (defined in `src/index.css`)
+Custom typography is defined as plain CSS classes to avoid conflicts with Tailwind's `text-{color}` utilities:
+- `.text-display` — 24px / 32px / weight 600
+- `.text-headline-sm` — 18px / 24px / weight 600
+- `.text-body-lg` — 14px / 20px
+- `.text-body-md` — 13px / 18px
+- `.text-body-sm` — 12px / 16px
+- `.text-label-md` — 12px / 16px / weight 500 / letter-spacing 0.02em
+- `.text-label-xs` — 11px / 14px / weight 500
+
+### Responsive Breakpoints
+- `sm:` — 640px (mobile landscape)
+- `md:` — 768px (tablet)
+- `lg:` — 1024px (desktop)
+- Sidebar: fixed on desktop (`lg:static`), slides in on mobile with overlay
+- Detail panels: full-screen overlay on mobile, side panel on desktop (`lg:static`)
+- Tables: horizontal scroll on mobile
+
+### Pages
+| Page | Route | Features |
+|------|-------|----------|
+| Login | `/login` | Phone OTP, 6-digit auto-tab inputs |
+| Dashboard | `/` | 8 stat cards, revenue chart, fleet map, quick actions, rider table |
+| Riders | `/riders` | Filter tabs, table, slide-in detail panel (approve/reject) |
+| Bookings | `/bookings` | Split layout, filterable table, detail panel (pickup/dropoff, rider, payment) |
+| Payments | `/payments` | Stats row, filter tabs, table, flag/release modals |
+| Settings | `/settings` | Secondary nav, profile, system config, notifications, security, regional |
+| Support | `/support` | Stats, ticket queue, conversation thread, knowledge base |
+
+### Admin Login Credentials
+- Phone: `256772100001` (David Okello)
+- OTP: check server logs (`journalctl -u boda-api -f`)
+
+### Seeded Data
+- 15 users, 12 riders (7 verified, 3 pending, 1 suspended), 20 bookings, 17 payments, 14 ratings, 8 support tickets, 6 notifications, 8 support ticket messages
+
+---
+
+## Security Audit (Completed June 2026)
+
+Full audit report at `D:\code\deploy\SECURITY_AUDIT.md`. All 17 vulnerabilities fixed:
+
+| Priority | Fixed | Key Changes |
+|----------|-------|-------------|
+| CRITICAL | 1 | Fare manipulation — server calculates fare, ignores client input |
+| HIGH | 5 | WebSocket auth, refresh token role fix, CORS whitelist, Redis password, booking ownership |
+| MEDIUM | 9 | OTP IP rate limiting, verify-otp rate limiting, session invalidation on logout, JWT secret enforcement, rider location spoofing fix, socket room auth, payment validation |
+| LOW | 3 | File upload validation (JPEG/PNG/WebP, 5MB max), generic error messages, soft delete for riders |
+
+### Key Security Changes
+- **Redis password**: `boda_redis_2026!` (in `/root/boda/backend/.env`)
+- **CORS whitelist**: Only `admin.ocaya.space`, `localhost:5173`, `localhost:3000`
+- **JWT secret**: Must be >= 32 characters, server won't start without it
+- **Rate limits**: 10 OTP requests per IP, 5 verify attempts per phone
+- **Soft delete**: `riders.is_deleted` column, all queries filter `is_deleted = false`
+- **Logout**: `POST /auth/logout` invalidates Redis session
 
 ---
 

@@ -29,7 +29,6 @@ const createBooking = async (req, reply) => {
       type,
       pickup_lat, pickup_lng, pickup_address,
       dropoff_lat, dropoff_lng, dropoff_address,
-      fare_estimate,
       item_description, recipient_name, recipient_phone,
     } = req.body;
 
@@ -55,7 +54,7 @@ const createBooking = async (req, reply) => {
       parseFloat(dropoff_lat), parseFloat(dropoff_lng)
     );
 
-    const calculatedFare = fare_estimate || estimateFare(distance, type);
+    const calculatedFare = estimateFare(distance, type);
 
     const id = uuidv4();
     const customerId = req.user.userId;
@@ -127,6 +126,8 @@ const createBooking = async (req, reply) => {
 const getBooking = async (req, reply) => {
   try {
     const { id } = req.params;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
 
     const result = await pool.query(
       `SELECT b.*,
@@ -145,6 +146,10 @@ const getBooking = async (req, reply) => {
     }
 
     const booking = result.rows[0];
+
+    if (userRole !== 'admin' && booking.customer_id !== userId && booking.rider_id !== userId) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
 
     if (booking.status === 'in_progress' || booking.status === 'accepted') {
       const location = await redis.hGet('riders:online', booking.rider_id);
@@ -236,7 +241,6 @@ const completeBooking = async (req, reply) => {
   try {
     const { id } = req.params;
     const riderId = req.user.userId;
-    const { fare_final } = req.body;
 
     const booking = await pool.query(
       `SELECT * FROM bookings WHERE id = $1 AND rider_id = $2 AND status = 'in_progress'`,
@@ -247,7 +251,7 @@ const completeBooking = async (req, reply) => {
       return reply.status(400).send({ error: 'Cannot complete this booking' });
     }
 
-    const finalFare = fare_final || booking.rows[0].fare_estimate;
+    const finalFare = booking.rows[0].fare_estimate;
 
     const result = await pool.query(
       `UPDATE bookings
