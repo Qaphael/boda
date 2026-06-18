@@ -476,31 +476,19 @@ Full audit report at `D:\code\deploy\SECURITY_AUDIT.md`. All 17 vulnerabilities 
 
 ## Current Challenges
 
-### 1. Rider App APK Build (BLOCKED)
-The rider app (`D:\code\rider-app\`) cannot build an APK via EAS. The root cause: **Node.js 24 on the local PC ships npm 11, which has a `caniuse-lite` version parsing bug** that breaks `npm install`, `npm ci`, and even `npm install --force`. This prevents:
-- Generating a valid `package-lock.json` locally
-- Installing `node_modules` locally (needed by EAS CLI for plugin resolution)
-
-**What works**: The customer app builds fine because it has fewer dependencies and its lock file was generated on the VPS (Node 20, npm 10) before the local npm broke.
-
-**Fix options (pick one):**
-1. **Install Node.js 20 via nvm** on the PC and use it for `npm install` in the rider-app directory
-2. **Generate lock file on VPS** and copy it back, then copy `node_modules` from customer-app and install rider-specific extras (`expo-camera`, `expo-image-picker`, `expo-notifications`, `react-native-maps`)
-3. **Upgrade the PC to Node.js 22** (not 24) which has npm 10 and doesn't have this bug
-
-### 2. OTP SMS Not Sending
+### 1. OTP SMS Not Sending
 OTP codes are logged to console only. Africa's Talking SMS integration is not yet implemented. For now, check logs with:
 ```bash
 ssh -i ~/.ssh/id_rsa root@212.47.72.186 "journalctl -u boda-api -f"
 ```
 
-### 3. PostGIS Extension Missing
+### 2. PostGIS Extension Missing
 The database schema references PostGIS for geo queries but the Docker PostgreSQL image doesn't include it. Tables were created without it. Not critical for MVP but needed for future proximity-based rider matching.
 
-### 4. No Payment Integration Yet
+### 3. No Payment Integration Yet
 The `.env` has placeholder keys for MTN MoMo, Airtel Money, and Africa's Talking. These need real credentials before payments and SMS work in production.
 
-### 5. No Real-Time Rider Tracking
+### 4. No Real-Time Rider Tracking
 Socket.io is set up and working, but the rider app needs to send location updates continuously. The `useLocationTracking` hook exists but needs testing end-to-end with a real device.
 
 ---
@@ -692,6 +680,121 @@ const [dashRes, ridersRes, ticketsRes] = await Promise.all([
 
 **Rule**: Logout must always call a backend endpoint to invalidate the session server-side.
 
+### 21. Every Button Must Have onPress (React Native)
+**Mistake**: 21 TouchableOpacity elements across 5 screens had no onPress — they looked tappable but did nothing.
+
+**Fix**: Every `<TouchableOpacity>` must have an onPress. Use `Alert.alert()` for placeholder actions (or better, styled modals).
+
+**Rule**: After building any RN screen, grep for `<TouchableOpacity` and verify every one has an onPress within 5 lines.
+
+### 22. Never Use Alert.alert() — Use Styled Modals
+**Mistake**: Used `Alert.alert()` across 42 calls in both mobile apps. Looks unprofessional and inconsistent with design system.
+
+**Fix**: Created `AppModal` component + `useModal` hook. Every screen uses `showModal({ icon, title, message, actions })` instead.
+
+**Rule**: NEVER use `Alert.alert()` or `alert()` in React Native. Always use the `useModal` hook + `<AppModal>` component.
+
+### 23. Wrong API Method = Runtime Crash
+**Mistake**: Called `bookingAPI.getNearby()` but `getNearby` is defined on `riderAPI`. Would crash when user's location is obtained.
+
+**Fix**: Import `riderAPI` and call `riderAPI.getNearby()`.
+
+**Rule**: Before calling any API method, verify it exists on the correct API object. Check `src/services/api.js`.
+
+### 24. Every Screen Must Be Reachable
+**Mistake**: `DeliveryDetailsScreen` was registered in App.js but no screen navigated to it — completely unreachable.
+
+**Fix**: Wired "Send Delivery" button on HomeScreen to navigate to DeliveryDetailsScreen.
+
+**Rule**: After adding a screen to App.js, grep for `navigate('ScreenName')` to verify at least one screen targets it.
+
+### 25. Missing Back Button = User Trapped
+**Mistake**: `BookingDetailScreen` had no back button — users had to use system back gesture.
+
+**Fix**: Added a `<TouchableOpacity onPress={navigation.goBack()}>` at the top of the screen.
+
+**Rule**: Every stack screen (not root tab) must have a back button or explicit close action.
+
+### 26. Expo SDK 56 Removed `splash` Config
+**Mistake**: Kept `splash: { backgroundColor: "#..." }` in app.json — Expo SDK 56 schema validation failed.
+
+**Fix**: Removed the `splash` field entirely. Only `adaptiveIcon.backgroundColor` is supported now.
+
+**Rule**: Run `npx expo-doctor` after any app.json change. The `splash` field was removed in SDK 56.
+
+### 27. Socket URLs Must Use Production
+**Mistake**: `useLocationTracking.js` had `SOCKET_URL = 'http://localhost:3000'` — only worked on dev machine.
+
+**Fix**: Changed to `https://boda.ocaya.space`.
+
+**Rule**: All hardcoded URLs in mobile apps must point to production. Never use localhost in shipped code.
+
+### 28. Orphaned Components Waste Space
+**Mistake**: `BottomNav.jsx` was created but never imported anywhere — React Navigation's tab bar handled it.
+
+**Fix**: Deleted the orphaned component.
+
+**Rule**: After creating a component, verify it's imported by at least one file. If unused, delete it immediately.
+
+---
+
+## Mobile App Design System (Customer + Rider)
+
+### Stack
+- React Native (Expo SDK 56)
+- React Navigation v7 (native-stack + bottom-tabs)
+- Axios for API calls
+- Socket.io-client for real-time
+
+### Design Tokens (in `src/theme.js`)
+Both apps share the same **Kinetic High-Contrast Utility** design system:
+- **Primary**: `#6d5e00` (dark yellow) / **Primary Container**: `#fde047` (bright yellow)
+- **Background**: `#fcf9f8`
+- **Font**: Outfit (all weights)
+- **Touch targets**: 48px minimum for bumpy riding conditions
+- **Bottom sheets**: All interactions in bottom sheets with grabber handles
+
+### Shared Components (in `src/components/`)
+- `AppModal` — Styled modal with icon, title, message, action buttons (replaces Alert.alert)
+- `useModal` — Hook: `const { showModal, ModalComponent } = useModal()`
+- `Grabber` — Bottom sheet grabber handle (40x4px bar)
+
+### Customer App Navigation
+- **Bottom tabs**: Home, Activity, Wallet, Profile
+- **Stack screens**: Login, NewBooking, Tracking, Rating, DeliveryDetails, BookingDetail
+
+### Rider App Navigation
+- **Bottom tabs**: Home, Earnings, Incentives, Help
+- **Stack screens**: Login, Register, Earnings, Vehicle, BookingRequest, ActiveBooking, TripDetails
+
+### Customer App Screens
+| Screen | Route | Features |
+|--------|-------|----------|
+| Login | (auth) | 4-digit OTP, Uganda flag, yellow brand |
+| Home | (tab) | Map canvas, action cards, recent activity bottom sheet |
+| Activity | (tab) | Filter chips, booking history with route viz |
+| Wallet | (tab) | Balance card, payment methods, transactions |
+| Profile | (tab) | Avatar, stats, settings groups, logout |
+| NewBooking | (stack) | Address inputs, vehicle selection, MoMo badge |
+| Tracking | (stack) | Live map, rider info, status pill |
+| Rating | (stack) | Star rating, feedback tags, comment box |
+| DeliveryDetails | (stack) | Recipient form, package size, instructions |
+| BookingDetail | (stack) | Trip details, rider info, rating |
+
+### Rider App Screens
+| Screen | Route | Features |
+|--------|-------|----------|
+| Login | (auth) | 4-digit OTP, Uganda flag, yellow brand |
+| Register | (stack) | 3-step progress stepper, document upload |
+| Home | (tab) | Map, online toggle, stats grid, quick links |
+| Earnings | (tab) | Period tabs, summary card, trip history |
+| Incentives | (tab) | Tier card, progress bar, quests, referrals |
+| Support | (tab) | Search, SOS, categories, tickets, FAQ, chat FAB |
+| Vehicle | (stack) | Vehicle hero, doc status, safety checklist |
+| BookingRequest | (stack) | Incoming booking overlay, countdown, accept/decline |
+| ActiveBooking | (stack) | Trip progress, customer card, confirm pickup |
+| TripDetails | (stack) | Fare breakdown, route viz, payment status |
+
 ---
 
 ## Agent Workflow Checklist
@@ -722,6 +825,18 @@ When making changes to this project, follow this order:
 5. Never hardcode data — fetch from API
 6. Make responsive: sidebar toggle on mobile, full-screen overlays for panels
 7. After building, grep for dead buttons: `grep -n "<button" src/pages/*.jsx`
+
+### When Building Mobile Apps (React Native)
+1. Add API method to `src/services/api.js`
+2. Use `useModal` hook + `<AppModal>` for ALL alerts/confirms — NEVER `Alert.alert()`
+3. Every `<TouchableOpacity>` MUST have an onPress
+4. Never hardcode data — fetch from API
+5. Use `src/theme.js` for all colors, typography, spacing — NEVER hardcoded values
+6. Every stack screen must have a back button (except root tabs)
+7. After building, grep for dead buttons: check every TouchableOpacity has onPress
+8. After adding a screen to App.js, verify it's navigated to from at least one screen
+9. Socket URLs must be `https://boda.ocaya.space` — never localhost
+10. Run `npx expo-doctor` after app.json changes (SDK 56 removed `splash` field)
 
 ### When Deploying
 1. Build frontend: `cd D:\code\admin && cmd /c "npx vite build"`

@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { bookingAPI } from '../services/api';
+import Grabber from '../components/Grabber';
+import { colors, typography, spacing, radius } from '../theme';
 
 export default function HomeScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [recentBookings, setRecentBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,83 +32,107 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', onPress: logout, style: 'destructive' },
-    ]);
-  };
-
   const statusColors = {
     pending: '#F59E0B',
     accepted: '#3B82F6',
     in_progress: '#10B981',
-    completed: '#6B7280',
-    cancelled: '#EF4444',
+    completed: colors.primary,
+    cancelled: colors.error,
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    return d.toLocaleDateString('en-UG', { month: 'short', day: 'numeric' });
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.name || 'there'}!</Text>
-          <Text style={styles.subtitle}>Where are you going?</Text>
+      <View style={styles.mapCanvas}>
+        <View style={styles.mapOverlay}>
+          <View style={styles.statusPill}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>Finding active bodas nearby</Text>
+          </View>
         </View>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+
+        <View style={styles.floatingActions}>
+          <TouchableOpacity
+            style={styles.rideCard}
+            onPress={() => navigation.navigate('NewBooking', { type: 'ride' })}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.actionIcon}>🏍</Text>
+            <Text style={styles.actionTitle}>Request Ride</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deliveryCard}
+            onPress={() => navigation.navigate('DeliveryDetails')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.actionIcon}>📦</Text>
+            <Text style={styles.actionTitle}>Send Delivery</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.actionCards}>
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('NewBooking', { type: 'ride' })}
-        >
-          <Text style={styles.actionEmoji}>Motorcycle</Text>
-          <Text style={styles.actionTitle}>Request Ride</Text>
-          <Text style={styles.actionDesc}>Get a ride to your destination</Text>
-        </TouchableOpacity>
+      <View style={styles.bottomSheet}>
+        <Grabber />
+        <View style={styles.sheetContent}>
+          <Text style={styles.greeting}>Hello, Gulu!</Text>
 
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('NewBooking', { type: 'delivery' })}
-        >
-          <Text style={styles.actionEmoji}>Package</Text>
-          <Text style={styles.actionTitle}>Send Delivery</Text>
-          <Text style={styles.actionDesc}>Send items to anyone</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.historySection}>
-        <Text style={styles.sectionTitle}>Recent Bookings</Text>
-        {loading ? (
-          <ActivityIndicator size="small" color="#4F46E5" />
-        ) : recentBookings.length === 0 ? (
-          <Text style={styles.emptyText}>No bookings yet</Text>
-        ) : (
-          recentBookings.map((booking) => (
-            <TouchableOpacity
-              key={booking.id}
-              style={styles.bookingCard}
-              onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-            >
-              <View style={styles.bookingHeader}>
-                <Text style={styles.bookingType}>
-                  {booking.type === 'ride' ? 'Ride' : 'Delivery'}
-                </Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusColors[booking.status] || '#6B7280' }]}>
-                  <Text style={styles.statusText}>{booking.status}</Text>
-                </View>
-              </View>
-              <Text style={styles.bookingAddress}>
-                {booking.pickup_address || 'Pickup'} → {booking.dropoff_address || 'Dropoff'}
-              </Text>
-              <Text style={styles.bookingFare}>
-                UGX {(booking.fare_estimate || 0).toLocaleString()}
-              </Text>
+          <View style={styles.activityHeader}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Activity')}>
+              <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
-          ))
-        )}
+          </View>
+
+          <ScrollView style={styles.activityList} showsVerticalScrollIndicator={false}>
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
+            ) : recentBookings.length === 0 ? (
+              <Text style={styles.emptyText}>No recent activity</Text>
+            ) : (
+              recentBookings.map((booking, index) => (
+                <TouchableOpacity
+                  key={booking.id}
+                  style={styles.activityItem}
+                  onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.activityIconBg,
+                    booking.type === 'delivery' ? styles.deliveryIconBg : null,
+                  ]}>
+                    <Text style={styles.activityIconText}>
+                      {booking.type === 'delivery' ? '📦' : '🏍'}
+                    </Text>
+                  </View>
+                  <View style={styles.activityInfo}>
+                    <Text style={styles.activityTitle}>
+                      {booking.type === 'ride' ? 'Ride' : 'Delivery'}
+                    </Text>
+                    <Text style={styles.activityStatus}>
+                      Status: {booking.status?.replace('_', ' ')}
+                    </Text>
+                  </View>
+                  <View style={styles.activityRight}>
+                    <Text style={styles.activityFare}>
+                      UGX {(booking.fare_estimate || 0).toLocaleString()}
+                    </Text>
+                    <Text style={styles.activityTime}>{formatTime(booking.created_at)}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+        </View>
       </View>
     </View>
   );
@@ -108,101 +141,188 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    padding: 16,
+    backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  mapCanvas: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.surfaceContainerHighest,
+    zIndex: 1,
+  },
+  mapOverlay: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    marginBottom: 24,
+    zIndex: 10,
   },
-  greeting: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceContainerHighest,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginRight: 8,
   },
-  logoutText: {
-    color: '#EF4444',
-    fontSize: 14,
+  statusText: {
+    ...typography.labelSm,
+    color: colors.onSurfaceVariant,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  actionCards: {
-    gap: 12,
-    marginBottom: 24,
+  floatingActions: {
+    position: 'absolute',
+    bottom: '42%',
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: 'row',
+    gap: spacing.lg,
+    zIndex: 20,
   },
-  actionCard: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 12,
-    padding: 20,
+  rideCard: {
+    flex: 1,
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radius.xl,
+    paddingVertical: 24,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  actionEmoji: {
-    fontSize: 28,
+  deliveryCard: {
+    flex: 1,
+    backgroundColor: colors.inverseSurface,
+    borderRadius: radius.xl,
+    paddingVertical: 24,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.outlineVariant,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  actionIcon: {
+    fontSize: 32,
     marginBottom: 8,
   },
   actionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...typography.titleMd,
+    color: colors.onPrimaryContainer,
   },
-  actionDesc: {
-    fontSize: 14,
-    color: '#E0E7FF',
-    marginTop: 4,
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 64,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 25,
+    elevation: 16,
+    maxHeight: '50%',
+    zIndex: 30,
   },
-  historySection: {
-    flex: 1,
+  sheetContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 16,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+  greeting: {
+    ...typography.headlineLgMobile,
+    color: colors.onBackground,
+    marginBottom: spacing.lg,
   },
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    marginTop: 40,
-  },
-  bookingCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 14,
-    marginBottom: 10,
-  },
-  bookingHeader: {
+  activityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.md,
   },
-  bookingType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4F46E5',
+  sectionTitle: {
+    ...typography.titleMd,
+    color: colors.onSurface,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  seeAll: {
+    ...typography.labelLg,
+    color: colors.primary,
   },
-  statusText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
+  activityList: {
+    maxHeight: 220,
   },
-  bookingAddress: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
+  emptyText: {
+    ...typography.bodyMd,
+    color: colors.onSurfaceVariant,
+    textAlign: 'center',
+    marginTop: 20,
   },
-  bookingFare: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    marginBottom: spacing.sm,
+  },
+  activityIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primaryFixedDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  deliveryIconBg: {
+    backgroundColor: colors.secondaryContainer,
+  },
+  activityIconText: {
+    fontSize: 20,
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityTitle: {
+    ...typography.titleMd,
+    color: colors.onSurface,
+  },
+  activityStatus: {
+    ...typography.labelSm,
+    color: colors.onSurfaceVariant,
+  },
+  activityRight: {
+    alignItems: 'flex-end',
+  },
+  activityFare: {
+    ...typography.titleMd,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  activityTime: {
+    ...typography.labelSm,
+    color: colors.onSurfaceVariant,
   },
 });

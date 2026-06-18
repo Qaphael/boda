@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3000';
+const SOCKET_URL = 'https://boda.ocaya.space';
 
 export const useLocationTracking = (riderId, bookingId) => {
   const intervalRef = useRef(null);

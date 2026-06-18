@@ -1,0 +1,69 @@
+Session Handoff: Boda Customer App Redesign
+What We Just Completed
+We finished the Admin Dashboard redesign and full feature build:
+- Redesigned all 7 pages with Stitch design system (Tailwind v4, Geist font, Material Symbols)
+- Built backend endpoints for support tickets, settings, and notifications
+- Completed full security audit — fixed all 17 vulnerabilities (1 CRITICAL, 5 HIGH, 9 MEDIUM, 2 LOW)
+- Wired up all 13 dead buttons with proper modals (no alert() calls)
+- Removed all hardcoded data — everything fetches from the API
+- Made all pages responsive (sidebar toggle, full-screen overlays on mobile)
+- Updated AGENTS.md with 20 lessons learned and agent workflow checklist
+- All committed to git and deployed to VPS
+Where We Are Now
+We're starting the Customer App (React Native/Expo) redesign. The Stitch HTML designs are at:
+D:\code\customer-app\stitch_boda_ride_delivery\
+├── kinetic_high_contrast_utility/DESIGN.md  ← Design system (Outfit font, Yellow #FDE047 primary)
+├── login_verify/code.html                   ← Login + 4-digit OTP
+├── home_boda_gulu/code.html                 ← Home with map, bottom sheet, nav bar
+├── request_a_ride/code.html                 ← Ride request with vehicle selection
+├── delivery_details/code.html               ← Delivery recipient/package/instructions
+├── tracking_ride/code.html                  ← Live ride tracking
+├── rate_your_trip/code.html                 ← Post-trip rating
+├── user_profile/code.html                   ← User profile
+├── wallet_payments/code.html                ← Wallet/payments
+└── your_activity/                           ← Ride history
+Design System (Customer App — DIFFERENT from Admin)
+- Primary: #6d5e00 (dark yellow) / Primary Container: #fde047 (bright yellow)
+- Font: Outfit (NOT Geist)
+- Background: #fcf9f8
+- Style: High-contrast, outdoor-optimized, map-centric layout
+- Touch targets: 48px minimum for bumpy riding conditions
+- Bottom sheets: All interactions in bottom sheets with grabber handles
+Current Customer App State
+D:\code\customer-app\src\screens\
+├── LoginScreen.jsx          ← Basic OTP, needs redesign
+├── HomeScreen.jsx           ← Basic cards, needs redesign
+├── NewBookingScreen.jsx     ← Basic form, needs redesign
+└── BookingDetailScreen.jsx  ← Basic details, needs redesign
+What Needs To Be Done
+1. Read all 10 HTML files from stitch_boda_ride_delivery/
+2. Extract the React Native components from each HTML
+3. Map HTML sections to RN components (bottom sheets, cards, inputs, nav)
+4. Rebuild each screen to match the Stitch designs
+5. Add new screens: Activity, Profile, Wallet, Tracking, Rating
+6. Add bottom tab navigation (Home, Activity, Wallet, Profile)
+7. Wire up all screens to the backend API at https://boda.ocaya.space
+8. Build the APK with EAS: $env:EAS_NO_VCS="1"; cmd /c eas.cmd build -p android --profile preview --non-interactive
+Key Rules (from AGENTS.md lessons)
+- Never hardcode data — fetch from API
+- Every button must have functionality
+- Use modals, not alert()
+- React Native uses StyleSheet, not Tailwind
+- Test on real device — outdoor visibility matters
+- OTP is 4 digits (not 6) per the Stitch design
+Backend API (already live)
+- https://boda.ocaya.space — All endpoints working
+- Auth: POST /auth/send-otp, POST /auth/verify-otp
+- Bookings: POST /bookings, GET /bookings/:id, PATCH /bookings/:id/accept|complete|cancel
+- Ratings: POST /bookings/:id/rate
+- Riders: GET /riders/nearby, PATCH /riders/:id/location|online
+Git Status
+- Branch: master
+- Last commit: 06ac8ce — AGENTS.md update
+- All admin changes committed and deployed
+VPS Details
+- IP: 212.47.72.186
+- SSH: ssh -i ~/.ssh/id_rsa root@212.47.72.186
+- Backend: systemctl restart boda-api
+- Redis password: boda_redis_2026!
+- Admin login: 256772100001 (OTP in server logs)

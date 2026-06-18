@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { io } from 'socket.io-client';
 import { bookingAPI } from '../services/api';
+import { colors, typography, spacing, radius } from '../theme';
 
-const SOCKET_URL = 'http://localhost:3000';
+const SOCKET_URL = 'https://boda.ocaya.space';
 
 export default function BookingDetailScreen({ route, navigation }) {
   const { bookingId } = route.params;
@@ -11,31 +18,21 @@ export default function BookingDetailScreen({ route, navigation }) {
   const [riderLocation, setRiderLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     loadBooking();
     setupSocket();
-
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
-
-  const socketRef = { current: null };
 
   const setupSocket = () => {
     const socket = io(SOCKET_URL, { transports: ['websocket'] });
     socketRef.current = socket;
-
-    socket.on('connect', () => {
-      socket.emit('join:booking', { bookingId });
-    });
-
-    socket.on('rider:moved', (data) => {
-      setRiderLocation(data);
-    });
+    socket.on('connect', () => socket.emit('join:booking', { bookingId }));
+    socket.on('rider:moved', (data) => setRiderLocation(data));
   };
 
   const loadBooking = async () => {
@@ -43,42 +40,31 @@ export default function BookingDetailScreen({ route, navigation }) {
       const { data } = await bookingAPI.getBooking(bookingId);
       setBooking(data.booking);
     } catch (err) {
-      Alert.alert('Error', 'Failed to load booking details');
+      console.error('Failed to load booking:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = async () => {
-    Alert.alert('Cancel Booking', 'Are you sure you want to cancel?', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Yes',
-        style: 'destructive',
-        onPress: async () => {
-          setActionLoading(true);
-          try {
-            await bookingAPI.cancelBooking(bookingId);
-            Alert.alert('Success', 'Booking cancelled');
-            loadBooking();
-          } catch (err) {
-            Alert.alert('Error', err.response?.data?.error || 'Failed to cancel');
-          } finally {
-            setActionLoading(false);
-          }
-        },
-      },
-    ]);
+    setActionLoading(true);
+    try {
+      await bookingAPI.cancelBooking(bookingId);
+      loadBooking();
+    } catch (err) {
+      console.error('Cancel error:', err);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleRate = async (score) => {
     setActionLoading(true);
     try {
       await bookingAPI.rateBooking(bookingId, score, '');
-      Alert.alert('Success', 'Thanks for your rating!');
       loadBooking();
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Failed to submit rating');
+      console.error('Rating error:', err);
     } finally {
       setActionLoading(false);
     }
@@ -88,14 +74,14 @@ export default function BookingDetailScreen({ route, navigation }) {
     pending: '#F59E0B',
     accepted: '#3B82F6',
     in_progress: '#10B981',
-    completed: '#6B7280',
-    cancelled: '#EF4444',
+    completed: colors.primary,
+    cancelled: colors.error,
   };
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -103,16 +89,20 @@ export default function BookingDetailScreen({ route, navigation }) {
   if (!booking) {
     return (
       <View style={styles.center}>
-        <Text>Booking not found</Text>
+        <Text style={{ color: colors.onSurface }}>Booking not found</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <Text style={styles.backIcon}>←</Text>
+      </TouchableOpacity>
+
       <View style={styles.statusBar}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[booking.status] }]} />
-        <Text style={styles.statusText}>{booking.status.toUpperCase()}</Text>
+        <Text style={styles.statusText}>{booking.status?.replace('_', ' ')}</Text>
       </View>
 
       <View style={styles.card}>
@@ -129,9 +119,11 @@ export default function BookingDetailScreen({ route, navigation }) {
           <Text style={styles.label}>Dropoff</Text>
           <Text style={styles.value}>{booking.dropoff_address || 'N/A'}</Text>
         </View>
-        <View style={styles.row}>
+        <View style={[styles.row, { borderBottomWidth: 0 }]}>
           <Text style={styles.label}>Fare</Text>
-          <Text style={styles.value}>UGX {(booking.fare_final || booking.fare_estimate || 0).toLocaleString()}</Text>
+          <Text style={[styles.value, { color: colors.primary, fontWeight: '700' }]}>
+            UGX {(booking.fare_final || booking.fare_estimate || 0).toLocaleString()}
+          </Text>
         </View>
       </View>
 
@@ -142,26 +134,16 @@ export default function BookingDetailScreen({ route, navigation }) {
             <Text style={styles.label}>Name</Text>
             <Text style={styles.value}>{booking.rider_name}</Text>
           </View>
-          <View style={styles.row}>
+          <View style={[styles.row, { borderBottomWidth: 0 }]}>
             <Text style={styles.label}>Phone</Text>
             <Text style={styles.value}>{booking.rider_phone || 'N/A'}</Text>
           </View>
         </View>
       )}
 
-      {riderLocation && booking.status === 'in_progress' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Live Tracking</Text>
-          <Text style={styles.value}>Rider is on the way!</Text>
-          <Text style={styles.label}>
-            Lat: {riderLocation.lat?.toFixed(4)}, Lng: {riderLocation.lng?.toFixed(4)}
-          </Text>
-        </View>
-      )}
-
       {booking.status === 'pending' && (
         <TouchableOpacity
-          style={[styles.cancelButton, actionLoading && styles.buttonDisabled]}
+          style={[styles.cancelButton, actionLoading && { opacity: 0.5 }]}
           onPress={handleCancel}
           disabled={actionLoading}
         >
@@ -193,19 +175,36 @@ export default function BookingDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    padding: 16,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    paddingTop: 80,
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceContainerLowest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    marginBottom: spacing.lg,
+  },
+  backIcon: {
+    fontSize: 20,
+    color: colors.onSurface,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.background,
   },
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     gap: 8,
   },
   statusDot: {
@@ -214,79 +213,82 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    ...typography.titleMd,
+    color: colors.onSurface,
+    textTransform: 'capitalize',
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    ...typography.titleMd,
+    color: colors.onSurface,
+    marginBottom: spacing.md,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm + 2,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.surfaceContainer,
   },
   label: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodyMd,
+    color: colors.onSurfaceVariant,
   },
   value: {
-    fontSize: 14,
+    ...typography.bodyMd,
     fontWeight: '500',
-    color: '#333',
+    color: colors.onSurface,
+    maxWidth: '60%',
+    textAlign: 'right',
   },
   cancelButton: {
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-    padding: 14,
+    backgroundColor: colors.errorContainer,
+    borderRadius: radius.xl,
+    height: spacing.touchMin,
     alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
+    justifyContent: 'center',
+    marginTop: spacing.lg,
   },
   cancelButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.titleMd,
+    color: colors.error,
+    fontWeight: '700',
   },
   ratingSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    marginTop: spacing.lg,
   },
   ratingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    ...typography.titleMd,
+    color: colors.onSurface,
+    marginBottom: spacing.lg,
   },
   ratingButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   ratingButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#4F46E5',
-    justifyContent: 'center',
+    backgroundColor: colors.primaryContainer,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   ratingButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...typography.titleMd,
+    color: colors.onPrimaryContainer,
   },
 });
