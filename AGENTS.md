@@ -502,3 +502,243 @@ The `.env` has placeholder keys for MTN MoMo, Airtel Money, and Africa's Talking
 
 ### 5. No Real-Time Rider Tracking
 Socket.io is set up and working, but the rider app needs to send location updates continuously. The `useLocationTracking` hook exists but needs testing end-to-end with a real device.
+
+---
+
+## Mistakes Made & Lessons Learned (June 2026)
+
+**Read this section before making ANY changes. These are real bugs that broke the system in production.**
+
+### 1. Tailwind CSS v4 — `tailwind.config.js` Does Nothing
+**Mistake**: Wrote custom colors in `tailwind.config.js` and expected them to work. All pages rendered with no styling.
+
+**Root cause**: This project uses **Tailwind CSS v4** (`@tailwindcss/postcss`), which configures themes in CSS via `@theme`, not in `tailwind.config.js`. The JS config file is completely ignored.
+
+**Fix**: All custom colors MUST be defined in `src/index.css`:
+```css
+@import "tailwindcss";
+@theme {
+  --color-primary: #0050cb;
+  --color-surface: #fbf8ff;
+  /* ... */
+}
+```
+
+**Rule**: Before writing any Tailwind config, check which version is installed. V4 = CSS config. V3 = JS config.
+
+### 2. Font CDN URLs Must Be Correct
+**Mistake**: Used `cdn.jsdelivr.net/font/geist/Geist-Regular.woff2` — all fonts 404'd.
+
+**Fix**: Use `cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/Geist-Regular.woff2`
+
+**Rule**: Always test CDN URLs in browser before hardcoding them.
+
+### 3. CORS Must Allow All HTTP Methods
+**Mistake**: Used `@fastify/cors` with `{ origin: true }` — PATCH and DELETE requests were blocked by browsers.
+
+**Fix**:
+```js
+await fastify.register(cors, {
+  origin: ['https://admin.ocaya.space', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+});
+```
+
+**Rule**: Always list all HTTP methods explicitly. Never use `origin: true` in production — whitelist specific domains.
+
+### 4. PostgreSQL Type Inference Fails with CASE Expressions
+**Mistake**: SQL query `CASE WHEN $1 = 'resolved' THEN NOW() ELSE resolved_at END` caused `500 error: inconsistent types deduced for parameter $1`.
+
+**Fix**: Cast parameters explicitly: `$1::varchar = 'resolved'`
+
+**Rule**: When using `$1` in both SET and CASE WHEN in the same query, always cast with `::varchar` or `::text`.
+
+### 5. Fare Calculation Must Be Server-Side Only
+**Mistake**: `completeBooking` accepted `fare_final` from the request body. A rider could set fare to 0 or 1,000,000.
+
+**Fix**: Always use server-calculated fare:
+```js
+const finalFare = booking.rows[0].fare_estimate; // Never trust client input
+```
+
+**Rule**: ANY financial calculation (fares, payments, splits) must be done server-side. Client values are untrusted.
+
+### 6. Never Use `req.params` for Authenticated Resources
+**Mistake**: `updateLocation` used `req.params.riderId` — any rider could update another rider's location.
+
+**Fix**: Use `req.user.riderId` from the JWT:
+```js
+const riderId = req.user.riderId; // From JWT, not params
+```
+
+**Rule**: For resource ownership, always use the authenticated user's ID from the JWT, never from URL params.
+
+### 7. Refresh Token Must Re-derive Role from Database
+**Mistake**: `refreshAccessToken` hardcoded `role: 'customer'`. Admins got demoted on refresh.
+
+**Fix**: Look up role from database:
+```js
+const adminCheck = await pool.query('SELECT id FROM admins WHERE user_id = $1 AND is_active = true', [decoded.userId]);
+const role = adminCheck.rows.length > 0 ? 'admin' : 'customer';
+```
+
+**Rule**: Role must be re-verified from DB on every token refresh. Never hardcode roles.
+
+### 8. Sessions Must Be Invalidated on Logout
+**Mistake**: Logout only cleared localStorage. The refresh token in Redis remained valid for 7 days.
+
+**Fix**: Added `POST /auth/logout` that deletes the Redis session key.
+
+**Rule**: Always provide a logout endpoint that invalidates server-side sessions.
+
+### 9. WebSocket Connections Need Authentication
+**Mistake**: Socket.io had no auth — anyone could connect, spoof rider locations, or track any booking.
+
+**Fix**: Added JWT verification middleware on Socket.io connection:
+```js
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Authentication required'));
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  socket.userId = decoded.userId;
+  next();
+});
+```
+
+**Rule**: ALL WebSocket connections must authenticate. Never allow anonymous socket connections.
+
+### 10. Hardcoded Data in Dashboard
+**Mistake**: Dashboard had hardcoded rider names, ticket counts, stats. Data never matched reality.
+
+**Fix**: All data comes from API calls:
+```js
+const [dashRes, ridersRes, ticketsRes] = await Promise.all([
+  adminAPI.getDashboard(),
+  adminAPI.getPendingRiders({ limit: 50 }),
+  adminAPI.getTickets({ limit: 1 }),
+]);
+```
+
+**Rule**: NEVER hardcode data in UI. Always fetch from API. If API doesn't have the data, build the endpoint first.
+
+### 11. Every Button Must Have an onClick
+**Mistake**: 13 buttons across 4 pages had no onClick handlers — they looked clickable but did nothing.
+
+**Fix**: Every `<button>` must have an onClick. Dead buttons destroy user trust. If a feature isn't built yet, don't show the button.
+
+**Rule**: After building any page, grep for `<button` and verify every one has an onClick.
+
+### 12. Use Modals/Panels, Not `alert()`
+**Mistake**: Used `alert()` to display payment details and rider info. Looks unprofessional.
+
+**Fix**: Created proper modal components matching the design system.
+
+**Rule**: Never use `alert()` or `confirm()` in production UI. Use styled modals.
+
+### 13. Soft Delete > Hard Delete
+**Mistake**: `DELETE FROM riders` permanently destroyed data with no recovery.
+
+**Fix**: Added `is_deleted` boolean column. All queries filter `WHERE is_deleted = false`.
+
+**Rule**: Use soft delete for any user-generated data. Add audit trail tables for compliance.
+
+### 14. Rate Limit on Every Auth Endpoint
+**Mistake**: Only `/send-otp` had rate limiting. `/verify-otp` had none — unlimited brute force.
+
+**Fix**: Added per-phone and per-IP rate limiting on both endpoints.
+
+**Rule**: Rate limit ALL authentication endpoints, not just the first one.
+
+### 15. Generic Error Messages
+**Mistake**: Errors like "No OTP found. Request a new one." confirmed phone numbers exist.
+
+**Fix**: Changed to "Invalid or expired OTP" — same message for both cases.
+
+**Rule**: Auth error messages must never confirm whether a resource (user, phone, email) exists.
+
+### 16. File Upload Validation Is Mandatory
+**Mistake**: Rider photos accepted any content — no type, size, or format check.
+
+**Fix**: Added validation for JPEG/PNG/WebP, 5MB max, data URI or URL format.
+
+**Rule**: Validate ALL file uploads: type, size, format. Never store raw user input.
+
+### 17. Redis Needs Authentication
+**Mistake**: Redis had no password. If VPS is compromised, all sessions/OTPs exposed.
+
+**Fix**: Set `requirepass` in Redis config, updated connection string with password.
+
+**Rule**: Every service (Redis, PostgreSQL, etc.) must have authentication enabled.
+
+### 18. JWT Secrets Must Be Strong
+**Mistake**: No minimum length enforced. Weak secrets = forged tokens.
+
+**Fix**: Server won't start if `JWT_SECRET` < 32 characters.
+
+**Rule**: Enforce minimum secret length at startup. Log a warning if using defaults.
+
+### 19. CORS Origins Must Be Whitelisted
+**Mistake**: `origin: true` reflected any requesting origin — effectively allowing all domains.
+
+**Fix**: Explicit whitelist: `['https://admin.ocaya.space', 'http://localhost:5173']`
+
+**Rule**: Never use `origin: true` in production. Always whitelist specific domains.
+
+### 20. Session Invalidation Needs Backend Endpoint
+**Mistake**: Frontend logout only cleared localStorage. Backend session in Redis stayed valid.
+
+**Fix**: Added `POST /auth/logout` endpoint that deletes Redis session key.
+
+**Rule**: Logout must always call a backend endpoint to invalidate the session server-side.
+
+---
+
+## Agent Workflow Checklist
+
+When making changes to this project, follow this order:
+
+### Before Starting
+1. Read this AGENTS.md file completely
+2. Check which Tailwind version is in use (v4 = CSS config)
+3. Check the backend server.js for existing routes
+4. Check the frontend api.js for existing API methods
+
+### When Building Backend
+1. Add route to the appropriate routes file
+2. Export the handler in module.exports
+3. Register the route in server.js with proper auth middleware
+4. Use parameterized queries (`$1`, `$2`) — NEVER string concatenation
+5. Cast types explicitly when using CASE expressions
+6. Add rate limiting on auth endpoints
+7. Use soft delete for user data
+8. Add audit trail for sensitive actions
+
+### When Building Frontend
+1. Add API method to `src/services/api.js`
+2. Import `adminAPI` or `authAPI` in the page component
+3. Every `<button>` MUST have an onClick
+4. Never use `alert()` — use styled modals
+5. Never hardcode data — fetch from API
+6. Make responsive: sidebar toggle on mobile, full-screen overlays for panels
+7. After building, grep for dead buttons: `grep -n "<button" src/pages/*.jsx`
+
+### When Deploying
+1. Build frontend: `cd D:\code\admin && cmd /c "npx vite build"`
+2. Deploy frontend: `scp -r dist/* root@212.47.72.186:/var/www/boda-admin/`
+3. Deploy backend: `scp backend files root@212.47.72.186:/root/boda/backend/src/`
+4. Restart backend: `ssh root@212.47.72.186 "systemctl restart boda-api"`
+5. Verify: `Invoke-WebRequest -Uri "https://boda.ocaya.space/health"`
+6. Hard refresh browser: `Ctrl+Shift+R`
+
+### Security Checklist
+Before any deploy, verify:
+- [ ] No `alert()` or `console.log` with sensitive data
+- [ ] All endpoints have auth middleware
+- [ ] All financial calculations are server-side
+- [ ] CORS is whitelisted (not `origin: true`)
+- [ ] JWT secrets are >= 32 characters
+- [ ] Redis has password
+- [ ] SQL uses parameterized queries
+- [ ] File uploads are validated
+- [ ] Error messages don't leak internals
