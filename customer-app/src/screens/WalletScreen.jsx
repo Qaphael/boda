@@ -69,7 +69,7 @@ export default function WalletScreen() {
               <Text style={styles.addNew}>+ Add New</Text>
             </TouchableOpacity>
           </View>
-          {paymentMethods.map((method) => (
+          {(paymentMethods || []).map((method) => (
             <TouchableOpacity key={method.id} style={styles.methodCard} onPress={() => handleSelectMethod(method.id)} activeOpacity={0.7}>
               <View style={[styles.methodIcon, { backgroundColor: `${method.color}1a`, borderColor: method.color }]}>
                 <Text style={[styles.methodIconText, { color: method.color === '#FFCC00' ? '#000' : method.color }]}>
@@ -91,7 +91,7 @@ export default function WalletScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Transactions</Text>
           </View>
-          {MOCK_TRANSACTIONS.map((tx) => (
+          {(MOCK_TRANSACTIONS || []).map((tx) => (
             <View key={tx.id} style={styles.txItem}>
               <View style={[styles.txIconBg, { backgroundColor: tx.bgColor }]}>
                 <Text style={styles.txIcon}>{tx.icon}</Text>
