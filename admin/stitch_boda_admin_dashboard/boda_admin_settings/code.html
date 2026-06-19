@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Settings | Boda Admin Operations</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        @font-face {
+            font-family: 'Geist';
+            src: url('https://fonts.cdnfonts.com/s/93121/Geist-Regular.woff') format('woff');
+        }
+        body { font-family: 'Geist', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+            font-size: 20px;
+        }
+        .mono-text { font-family: 'JetBrains Mono', monospace; }
+        /* Precision focus ring */
+        .focus-ring:focus-within {
+            outline: none;
+            border-color: #0050cb;
+            box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.1);
+        }
+        /* Custom scrollbar for data-dense areas */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #fbf8ff; }
+        ::-webkit-scrollbar-thumb { background: #c2c6d8; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #727687; }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#1a1b22",
+                    "on-tertiary-fixed-variant": "#832600",
+                    "tertiary-fixed": "#ffdbd0",
+                    "primary-fixed-dim": "#b3c5ff",
+                    "tertiary-container": "#cc4204",
+                    "outline": "#727687",
+                    "surface-dim": "#dad9e3",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "surface-container-low": "#f4f2fd",
+                    "on-error": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-fixed": "#dae1ff",
+                    "on-surface-variant": "#424656",
+                    "primary-container": "#0066ff",
+                    "surface-variant": "#e3e1ec",
+                    "outline-variant": "#c2c6d8",
+                    "on-tertiary": "#ffffff",
+                    "on-tertiary-fixed": "#390c00",
+                    "on-secondary-container": "#5c647a",
+                    "on-primary-container": "#f8f7ff",
+                    "on-primary": "#ffffff",
+                    "surface-tint": "#0054d6",
+                    "inverse-surface": "#2f3038",
+                    "secondary-fixed": "#dae2fd",
+                    "tertiary-fixed-dim": "#ffb59d",
+                    "surface-bright": "#fbf8ff",
+                    "on-error-container": "#93000a",
+                    "surface": "#fbf8ff",
+                    "on-secondary-fixed": "#131b2e",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "error": "#ba1a1a",
+                    "secondary-container": "#dae2fd",
+                    "inverse-on-surface": "#f1effa",
+                    "tertiary": "#a33200",
+                    "primary": "#0050cb",
+                    "on-primary-fixed": "#001849",
+                    "on-background": "#1a1b22",
+                    "inverse-primary": "#b3c5ff",
+                    "surface-container-highest": "#e3e1ec",
+                    "surface-container": "#eeedf7",
+                    "secondary": "#565e74",
+                    "background": "#fbf8ff",
+                    "surface-container-high": "#e8e7f1",
+                    "error-container": "#ffdad6",
+                    "on-primary-fixed-variant": "#003fa4",
+                    "on-tertiary-container": "#fff6f4",
+                    "on-secondary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xl": "24px",
+                    "gutter": "12px",
+                    "unit": "4px",
+                    "lg": "16px",
+                    "sm": "8px",
+                    "md": "12px",
+                    "xs": "4px",
+                    "container-margin": "20px"
+            },
+            "fontFamily": {
+                    "label-xs": ["Geist"],
+                    "display": ["Geist"],
+                    "label-md": ["Geist"],
+                    "body-lg": ["Geist"],
+                    "headline-sm": ["Geist"],
+                    "body-md": ["Geist"],
+                    "mono": ["JetBrains Mono"],
+                    "body-sm": ["Geist"]
+            },
+            "fontSize": {
+                    "label-xs": ["11px", {"lineHeight": "14px", "fontWeight": "500"}],
+                    "display": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "body-lg": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-sm": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                    "mono": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                    "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-surface text-on-surface flex overflow-hidden h-screen">
+<!-- SideNavBar Anchor -->
+<aside class="flex flex-col h-full p-lg gap-md h-screen w-64 border-r border-outline-variant bg-surface shrink-0">
+<div class="flex items-center gap-sm mb-lg px-sm">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">motorcycle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">Boda Admin</span>
+<span class="text-on-surface-variant text-[11px] leading-tight">Gulu Hub Ops</span>
+</div>
+</div>
+<nav class="flex-1 space-y-unit">
+<div class="flex items-center gap-sm text-on-surface-variant hover:bg-surface-container-low rounded-lg px-md py-sm transition-colors cursor-pointer group">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant hover:bg-surface-container-low rounded-lg px-md py-sm transition-colors cursor-pointer">
+<span class="material-symbols-outlined">motorcycle</span>
+<span class="font-body-md text-body-md">Rider Management</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant hover:bg-surface-container-low rounded-lg px-md py-sm transition-colors cursor-pointer">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-body-md text-body-md">Bookings</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant hover:bg-surface-container-low rounded-lg px-md py-sm transition-colors cursor-pointer">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-md text-body-md">Payments</span>
+</div>
+<!-- ACTIVE STATE -->
+<div class="flex items-center gap-sm bg-secondary-container text-on-secondary-container font-medium rounded-lg px-md py-sm opacity-90 transition-all duration-150">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant hover:bg-surface-container-low rounded-lg px-md py-sm transition-colors cursor-pointer">
+<span class="material-symbols-outlined">support_agent</span>
+<span class="font-body-md text-body-md">Support</span>
+</div>
+</nav>
+<button class="bg-primary-container text-white px-md py-sm rounded-lg flex items-center justify-center gap-sm font-label-md text-label-md mt-auto hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+            New Dispatch
+        </button>
+</aside>
+<!-- Main View Area -->
+<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+<!-- TopNavBar Anchor -->
+<header class="flex justify-between items-center px-lg py-xs w-full h-12 border-b border-outline-variant bg-surface sticky top-0 z-10">
+<div class="flex items-center gap-lg">
+<h1 class="font-headline-sm text-headline-sm font-bold text-on-surface tracking-tight">Operations Control</h1>
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline-variant scale-75">search</span>
+<input class="w-full h-8 bg-surface-container-low border-none rounded-lg pl-xl pr-sm text-label-md focus:ring-1 focus:ring-primary" placeholder="Search settings..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:text-on-surface transition-colors p-unit">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors p-unit">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<div class="h-6 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-sm cursor-pointer hover:bg-surface-container-low p-unit rounded-lg transition-colors">
+<div class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close up professional portrait of a tech operations manager with a sharp, corporate look. The setting is a minimalist workspace with neutral gray and white tones and soft, professional studio lighting. The style is clean, modern, and trustworthy, with high-definition clarity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7P_JxrQqSb6Jb3om8bilr1fSZcCmUx6G7VE0RflUns4doYDP39J9Tox-lTrdPJZMZQ8e15LY14fWMYldDMdJnX1uh6mj8pcmnf5e9v7XU0ud61Hi1y9PhEIK9WM10jvkb-vHEuKBdCgvOQ8DKJIA_4XRlBwE73UGtMACpeXRVm25Jvg_9ssCabajsNrqZ9BYZxqmLgI1rWdrmHtK9Ljrl1msxEXkugCOAsnFcXorSrxGZ7j0nk5TT3XttDFgRl63Ydk7dLyarvuty"/>
+</div>
+<span class="font-label-md text-label-md font-semibold">Admin</span>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<main class="flex-1 overflow-y-auto bg-surface-container-lowest flex">
+<!-- Secondary Vertical Navigation (Internal Settings) -->
+<nav class="w-48 border-r border-outline-variant flex flex-col p-sm bg-surface shrink-0">
+<div class="px-md py-sm mb-unit">
+<span class="text-label-xs font-bold uppercase text-outline tracking-widest">General</span>
+</div>
+<a class="flex items-center px-md py-sm rounded text-body-sm font-medium bg-surface-container text-primary mb-unit transition-all border-l-2 border-primary" href="#profile">
+                    Profile
+                </a>
+<a class="flex items-center px-md py-sm rounded text-body-sm text-on-surface-variant hover:bg-surface-container-low mb-unit transition-all border-l-2 border-transparent" href="#system">
+                    System Config
+                </a>
+<a class="flex items-center px-md py-sm rounded text-body-sm text-on-surface-variant hover:bg-surface-container-low mb-unit transition-all border-l-2 border-transparent" href="#notifications">
+                    Notifications
+                </a>
+<div class="px-md py-sm mb-unit mt-md border-t border-outline-variant pt-md">
+<span class="text-label-xs font-bold uppercase text-outline tracking-widest">Security &amp; Region</span>
+</div>
+<a class="flex items-center px-md py-sm rounded text-body-sm text-on-surface-variant hover:bg-surface-container-low mb-unit transition-all border-l-2 border-transparent" href="#security">
+                    Security
+                </a>
+<a class="flex items-center px-md py-sm rounded text-body-sm text-on-surface-variant hover:bg-surface-container-low mb-unit transition-all border-l-2 border-transparent" href="#regional">
+                    Regional Settings
+                </a>
+</nav>
+<!-- Main Scrollable Section -->
+<div class="flex-1 p-lg max-w-4xl mx-auto space-y-xl pb-24">
+<!-- 1. PROFILE SECTION -->
+<section class="space-y-md" id="profile">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm font-bold">Admin Profile</h2>
+<button class="bg-primary text-white text-label-xs px-md py-xs rounded hover:opacity-90">Update Profile</button>
+</div>
+<div class="bg-white border border-outline-variant rounded p-lg grid grid-cols-3 gap-lg">
+<div class="flex flex-col space-y-unit">
+<label class="text-label-xs text-outline font-bold uppercase">Admin Full Name</label>
+<input class="border border-outline-variant rounded p-xs text-body-md focus-ring" type="text" value="Daniel Okello"/>
+</div>
+<div class="flex flex-col space-y-unit">
+<label class="text-label-xs text-outline font-bold uppercase">Phone Number</label>
+<input class="border border-outline-variant rounded p-xs text-body-md mono-text focus-ring" type="text" value="+256 772 123 456"/>
+</div>
+<div class="flex flex-col space-y-unit">
+<label class="text-label-xs text-outline font-bold uppercase">Email Address</label>
+<input class="border border-outline-variant rounded p-xs text-body-md focus-ring" type="email" value="d.okello@bodaplatform.co.ug"/>
+</div>
+</div>
+</section>
+<!-- 2. SYSTEM CONFIGURATION -->
+<section class="space-y-md" id="system">
+<div class="flex items-center gap-sm">
+<h2 class="font-headline-sm text-headline-sm font-bold">System Configuration</h2>
+<span class="bg-tertiary text-white text-[10px] px-sm py-0.5 rounded font-bold uppercase tracking-wider">Critical</span>
+</div>
+<!-- Bento Grid for Config -->
+<div class="grid grid-cols-2 gap-md">
+<!-- Switch Toggle Card -->
+<div class="bg-white border border-outline-variant rounded p-md flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-body-md font-bold">New Rider Registration</span>
+<span class="text-label-xs text-on-surface-variant">Globally enable or disable new applications.</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="bg-white border border-outline-variant rounded p-md flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-body-md font-bold">In-App Chat Support</span>
+<span class="text-label-xs text-on-surface-variant">Enable live support for active rides.</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<!-- Numeric Input Cards -->
+<div class="bg-white border border-outline-variant rounded p-md flex flex-col gap-sm">
+<label class="text-label-xs text-outline font-bold uppercase">Commission Rate (%)</label>
+<div class="flex items-center border border-outline-variant rounded bg-surface-container-lowest px-sm">
+<input class="w-full border-none p-xs text-body-md mono-text focus:ring-0" type="number" value="12.5"/>
+<span class="text-outline text-label-md">%</span>
+</div>
+<p class="text-[11px] text-on-surface-variant">Applied to every transaction globally.</p>
+</div>
+<div class="bg-white border border-outline-variant rounded p-md flex flex-col gap-sm">
+<label class="text-label-xs text-outline font-bold uppercase">Surge Multiplier (Max)</label>
+<div class="flex items-center border border-outline-variant rounded bg-surface-container-lowest px-sm">
+<input class="w-full border-none p-xs text-body-md mono-text focus:ring-0" step="0.1" type="number" value="2.5"/>
+<span class="text-outline text-label-md">X</span>
+</div>
+<p class="text-[11px] text-on-surface-variant">Hard cap for automated surge algorithms.</p>
+</div>
+</div>
+</section>
+<!-- 3. NOTIFICATIONS -->
+<section class="space-y-md" id="notifications">
+<h2 class="font-headline-sm text-headline-sm font-bold">Notification Protocols</h2>
+<div class="bg-white border border-outline-variant rounded overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-md py-xs text-label-xs text-outline uppercase font-bold">System Event</th>
+<th class="px-md py-xs text-label-xs text-outline uppercase font-bold text-center">SMS</th>
+<th class="px-md py-xs text-label-xs text-outline uppercase font-bold text-center">Email</th>
+<th class="px-md py-xs text-label-xs text-outline uppercase font-bold text-center">Webhook</th>
+</tr>
+</thead>
+<tbody class="text-body-sm">
+<tr class="border-b border-outline-variant hover:bg-surface-container-low transition-colors">
+<td class="px-md py-sm font-medium">New Rider Application</td>
+<td class="px-md py-sm text-center"><input class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+<td class="px-md py-sm text-center"><input checked="" class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+<td class="px-md py-sm text-center"><input checked="" class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-low transition-colors">
+<td class="px-md py-sm font-medium">Flagged Payment Alert</td>
+<td class="px-md py-sm text-center"><input checked="" class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+<td class="px-md py-sm text-center"><input checked="" class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+<td class="px-md py-sm text-center"><input class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-low transition-colors">
+<td class="px-md py-sm font-medium">System Maintenance Window</td>
+<td class="px-md py-sm text-center"><input class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+<td class="px-md py-sm text-center"><input checked="" class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+<td class="px-md py-sm text-center"><input class="rounded border-outline-variant text-primary" type="checkbox"/></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- 4. SECURITY -->
+<section class="space-y-md" id="security">
+<h2 class="font-headline-sm text-headline-sm font-bold">Security &amp; Access Control</h2>
+<div class="grid grid-cols-2 gap-md">
+<div class="bg-white border border-outline-variant rounded p-md flex items-start gap-md">
+<div class="bg-secondary-container p-sm rounded">
+<span class="material-symbols-outlined text-on-secondary-container">vibration</span>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between mb-unit">
+<span class="text-body-md font-bold">Two-Factor Authentication</span>
+<span class="text-[10px] bg-green-100 text-green-800 px-sm rounded font-bold">Active</span>
+</div>
+<p class="text-label-xs text-on-surface-variant">Protects your account with an additional mobile security code.</p>
+<button class="mt-sm text-primary text-label-xs font-bold hover:underline">Change Device</button>
+</div>
+</div>
+<div class="bg-white border border-outline-variant rounded p-md flex items-start gap-md">
+<div class="bg-error-container p-sm rounded">
+<span class="material-symbols-outlined text-on-error-container">history</span>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between mb-unit">
+<span class="text-body-md font-bold">Active Sessions</span>
+<span class="text-[10px] bg-outline-variant text-on-surface px-sm rounded font-bold">3 Active</span>
+</div>
+<p class="text-label-xs text-on-surface-variant">View and manage all browsers and devices currently logged in.</p>
+<button class="mt-sm text-error text-label-xs font-bold hover:underline">Log Out All Other Sessions</button>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. REGIONAL SETTINGS -->
+<section class="space-y-md" id="regional">
+<h2 class="font-headline-sm text-headline-sm font-bold">Localization</h2>
+<div class="bg-white border border-outline-variant rounded p-lg grid grid-cols-2 gap-lg">
+<div class="flex flex-col space-y-unit">
+<label class="text-label-xs text-outline font-bold uppercase">Operational Currency</label>
+<select class="border border-outline-variant rounded p-xs text-body-md bg-surface-container-low focus-ring">
+<option>UGX - Ugandan Shilling</option>
+<option>KES - Kenyan Shilling</option>
+<option>USD - United States Dollar</option>
+</select>
+</div>
+<div class="flex flex-col space-y-unit">
+<label class="text-label-xs text-outline font-bold uppercase">Timezone (System)</label>
+<select class="border border-outline-variant rounded p-xs text-body-md bg-surface-container-low focus-ring">
+<option>EAT (UTC+3) - East Africa Time</option>
+<option>GMT (UTC+0)</option>
+<option>CET (UTC+1)</option>
+</select>
+</div>
+</div>
+</section>
+<!-- Action Footer -->
+<div class="sticky bottom-4 left-0 right-0 flex justify-end gap-md">
+<button class="bg-surface border border-outline-variant px-lg py-sm rounded-lg text-body-sm font-medium hover:bg-surface-container transition-colors shadow-sm">Discard Changes</button>
+<button class="bg-primary text-white px-lg py-sm rounded-lg text-body-sm font-bold shadow-md hover:opacity-90 active:scale-95 transition-all">Save Changes</button>
+</div>
+</div>
+</main>
+</div>
+<!-- Micro-interaction Script -->
+<script>
+        // Smooth scroll for internal navigation
+        document.querySelectorAll('nav a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                
+                // Update navigation active state
+                document.querySelectorAll('nav a').forEach(a => {
+                    a.classList.remove('bg-surface-container', 'text-primary', 'border-primary');
+                    a.classList.add('text-on-surface-variant', 'border-transparent');
+                });
+                this.classList.add('bg-surface-container', 'text-primary', 'border-primary');
+                this.classList.remove('text-on-surface-variant', 'border-transparent');
+
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Simple form validation highlight
+        const inputs = document.querySelectorAll('input[type="number"]');
+        inputs.forEach(input => {
+            input.addEventListener('change', () => {
+                input.closest('.bg-white').classList.add('border-primary');
+                setTimeout(() => {
+                    input.closest('.bg-white').classList.remove('border-primary');
+                }, 1000);
+            });
+        });
+    </script>
+</body></html>

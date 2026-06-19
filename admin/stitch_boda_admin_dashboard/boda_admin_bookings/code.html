@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=JetBrains+Mono:wght@100..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Geist', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 10px; }
+        .table-row-hover:hover { background-color: #f4f4f5; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#fbf8ff",
+                        "on-surface-variant": "#424656",
+                        "on-secondary": "#ffffff",
+                        "primary": "#0050cb",
+                        "outline-variant": "#c2c6d8",
+                        "on-background": "#1a1b22",
+                        "tertiary": "#a33200",
+                        "surface-bright": "#fbf8ff",
+                        "on-surface": "#1a1b22",
+                        "on-tertiary": "#ffffff",
+                        "outline": "#727687",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-error-container": "#93000a",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#b3c5ff",
+                        "surface": "#fbf8ff",
+                        "surface-container-highest": "#e3e1ec",
+                        "inverse-on-surface": "#f1effa",
+                        "surface-dim": "#dad9e3",
+                        "surface-container-high": "#e8e7f1",
+                        "tertiary-fixed-dim": "#ffb59d",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#2f3038",
+                        "on-tertiary-container": "#fff6f4",
+                        "on-primary-container": "#f8f7ff",
+                        "on-primary-fixed-variant": "#003fa4",
+                        "on-tertiary-fixed-variant": "#832600",
+                        "secondary-fixed": "#dae2fd",
+                        "inverse-primary": "#b3c5ff",
+                        "secondary-container": "#dae2fd",
+                        "primary-container": "#0066ff",
+                        "on-secondary-container": "#5c647a",
+                        "on-tertiary-fixed": "#390c00",
+                        "surface-container": "#eeedf7",
+                        "primary-fixed": "#dae1ff",
+                        "surface-variant": "#e3e1ec",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#131b2e",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed": "#001849",
+                        "surface-tint": "#0054d6",
+                        "surface-container-low": "#f4f2fd",
+                        "secondary": "#565e74",
+                        "tertiary-container": "#cc4204",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed": "#ffdbd0"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "xl": "24px",
+                        "xs": "4px",
+                        "sm": "8px",
+                        "md": "12px",
+                        "gutter": "12px",
+                        "unit": "4px",
+                        "container-margin": "20px",
+                        "lg": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Geist"],
+                        "body-lg": ["Geist"],
+                        "label-xs": ["Geist"],
+                        "body-md": ["Geist"],
+                        "display": ["Geist"],
+                        "label-md": ["Geist"],
+                        "body-sm": ["Geist"],
+                        "mono": ["jetbrainsMono"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-lg": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-xs": ["11px", {"lineHeight": "14px", "fontWeight": "500"}],
+                        "body-md": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "display": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                        "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                        "mono": ["12px", {"lineHeight": "16px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background flex overflow-hidden">
+<!-- SideNavBar -->
+<aside class="flex flex-col h-screen w-64 border-r border-outline-variant bg-surface dark:bg-surface-container-low py-md px-sm z-50">
+<div class="px-md py-lg mb-xl">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary-fixed">Boda Admin</h1>
+<p class="font-label-md text-label-md text-on-surface-variant opacity-70">Logistics Hub</p>
+</div>
+<nav class="flex-1 space-y-xs">
+<!-- Dashboard -->
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant dark:text-outline hover:bg-surface-container dark:hover:bg-surface-container-high transition-colors duration-150 font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Rider Management -->
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant dark:text-outline hover:bg-surface-container dark:hover:bg-surface-container-high transition-colors duration-150 font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="motorcycle">motorcycle</span>
+<span>Rider Management</span>
+</a>
+<!-- Bookings (ACTIVE) -->
+<a class="flex items-center gap-md px-md py-sm rounded bg-secondary-container dark:bg-on-secondary-fixed-variant text-on-secondary-container dark:text-on-secondary-fixed font-semibold font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="receipt_long">receipt_long</span>
+<span>Bookings</span>
+</a>
+<!-- Payments -->
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant dark:text-outline hover:bg-surface-container dark:hover:bg-surface-container-high transition-colors duration-150 font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span>Payments</span>
+</a>
+</nav>
+<div class="mt-auto space-y-xs pt-lg border-t border-outline-variant/30">
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant dark:text-outline hover:bg-surface-container dark:hover:bg-surface-container-high font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant dark:text-outline hover:bg-surface-container dark:hover:bg-surface-container-high font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col h-screen overflow-hidden">
+<!-- TopNavBar -->
+<header class="flex items-center justify-between px-lg w-full sticky top-0 z-40 h-12 border-b border-outline-variant bg-surface-container-lowest dark:bg-surface">
+<div class="flex items-center gap-xl flex-1">
+<span class="font-headline-sm text-headline-sm font-black text-on-surface">Boda Hub</span>
+<div class="relative w-64 max-w-md hidden md:block">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-full pl-xl pr-md py-xs bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" placeholder="Search Bookings..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<button class="material-symbols-outlined text-outline hover:text-on-surface transition-colors" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined text-outline hover:text-on-surface transition-colors" data-icon="chat_bubble">chat_bubble</button>
+<button class="material-symbols-outlined text-outline hover:text-on-surface transition-colors" data-icon="settings">settings</button>
+<div class="w-8 h-8 rounded-full bg-surface-container overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a corporate logistics administrator in a modern office environment, wearing clean professional attire. The lighting is soft and natural, emphasizing a high-end corporate efficiency aesthetic with soft-focus background of digital data screens." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBciY3L9rs3E24yLMtWE05sw73ExMJO4DRd72IZkmpDqDI0ntyMl0ZVVKDp2hJejl3UiZDLKu8Olhme1nteuAhpmupzIPd1neeb9AHKuhn-KB6tL-Zhb1CJc591HO0i2mMqYmCyjzlaStDy_V2ELhc8_lOGNUx_oZTwt_XRGoYwOoo1QFayRmvL6qUZruLd2vetnc11eZIqzgzBjkXN6CarChRcqIETmqc0JApBf-9SiKIh35_2z3LGuVcJ2caW9zkOPNqb2lN9cEWt"/>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Table Section -->
+<section class="flex-1 flex flex-col min-w-0 bg-background">
+<!-- Filterable Table Header -->
+<div class="p-lg bg-surface border-b border-outline-variant flex flex-wrap items-center justify-between gap-md">
+<div class="flex items-center gap-md">
+<div class="flex flex-col gap-xs">
+<label class="text-label-xs font-label-xs text-outline uppercase tracking-wider">Status</label>
+<select class="bg-surface border border-outline-variant rounded px-sm py-xs font-body-md text-body-md min-w-[140px] focus:ring-1 focus:ring-primary">
+<option>All Statuses</option>
+<option>Active</option>
+<option>Completed</option>
+<option>Cancelled</option>
+</select>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="text-label-xs font-label-xs text-outline uppercase tracking-wider">Type</label>
+<select class="bg-surface border border-outline-variant rounded px-sm py-xs font-body-md text-body-md min-w-[120px] focus:ring-1 focus:ring-primary">
+<option>All Types</option>
+<option>Ride</option>
+<option>Delivery</option>
+</select>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="flex items-center gap-xs px-md py-xs bg-surface border border-outline-variant rounded hover:bg-surface-container transition-colors text-label-md font-label-md">
+<span class="material-symbols-outlined text-[16px]">download</span>
+                            Export CSV
+                        </button>
+<button class="flex items-center gap-xs px-md py-xs bg-primary text-on-primary rounded hover:opacity-90 transition-opacity text-label-md font-label-md">
+<span class="material-symbols-outlined text-[16px]">add</span>
+                            New Booking
+                        </button>
+</div>
+</div>
+<!-- Table Content -->
+<div class="flex-1 overflow-auto custom-scrollbar">
+<table class="w-full text-left border-collapse min-w-[800px]">
+<thead class="sticky top-0 bg-surface-container-low z-10">
+<tr class="border-b border-outline-variant">
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider">Booking ID</th>
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider">User</th>
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider">Rider</th>
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider">Type</th>
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider">Fare</th>
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider">Status</th>
+<th class="px-lg py-sm text-label-xs font-label-xs text-outline uppercase tracking-wider text-right">Time</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/30">
+<!-- Row 1 (Active) -->
+<tr class="table-row-hover cursor-pointer bg-surface transition-colors" onclick="showDetails('BK-9021')">
+<td class="px-lg py-md font-mono text-mono text-primary font-bold">BK-9021</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium">David Okello</td>
+<td class="px-lg py-md font-body-md text-body-md">Musa Kato</td>
+<td class="px-lg py-md">
+<span class="flex items-center gap-xs text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">motorcycle</span>
+                                        Ride
+                                    </span>
+</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium text-on-surface">UGX 12,500</td>
+<td class="px-lg py-md">
+<span class="px-sm py-[2px] rounded-full bg-primary-fixed text-on-primary-fixed text-label-xs font-bold uppercase">Active</span>
+</td>
+<td class="px-lg py-md text-right font-body-sm text-body-sm text-outline">2 mins ago</td>
+</tr>
+<!-- Row 2 (Completed) -->
+<tr class="table-row-hover cursor-pointer transition-colors" onclick="showDetails('BK-8944')">
+<td class="px-lg py-md font-mono text-mono text-primary font-bold">BK-8944</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium">Sarah Namuli</td>
+<td class="px-lg py-md font-body-md text-body-md">Brian Opio</td>
+<td class="px-lg py-md">
+<span class="flex items-center gap-xs text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">package_2</span>
+                                        Delivery
+                                    </span>
+</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium text-on-surface">UGX 8,000</td>
+<td class="px-lg py-md">
+<span class="px-sm py-[2px] rounded-full bg-emerald-100 text-emerald-800 text-label-xs font-bold uppercase">Completed</span>
+</td>
+<td class="px-lg py-md text-right font-body-sm text-body-sm text-outline">15 mins ago</td>
+</tr>
+<!-- Row 3 (Cancelled) -->
+<tr class="table-row-hover cursor-pointer transition-colors" onclick="showDetails('BK-8832')">
+<td class="px-lg py-md font-mono text-mono text-primary font-bold">BK-8832</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium">Joseph Musisi</td>
+<td class="px-lg py-md font-body-md text-body-md text-outline">N/A</td>
+<td class="px-lg py-md">
+<span class="flex items-center gap-xs text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">motorcycle</span>
+                                        Ride
+                                    </span>
+</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium text-on-surface">UGX 5,500</td>
+<td class="px-lg py-md">
+<span class="px-sm py-[2px] rounded-full bg-error-container text-on-error-container text-label-xs font-bold uppercase">Cancelled</span>
+</td>
+<td class="px-lg py-md text-right font-body-sm text-body-sm text-outline">1 hour ago</td>
+</tr>
+<!-- Row 4 (Completed) -->
+<tr class="table-row-hover cursor-pointer transition-colors" onclick="showDetails('BK-8721')">
+<td class="px-lg py-md font-mono text-mono text-primary font-bold">BK-8721</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium">Alice Aber</td>
+<td class="px-lg py-md font-body-md text-body-md">Ivan Sseba</td>
+<td class="px-lg py-md">
+<span class="flex items-center gap-xs text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">motorcycle</span>
+                                        Ride
+                                    </span>
+</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium text-on-surface">UGX 15,200</td>
+<td class="px-lg py-md">
+<span class="px-sm py-[2px] rounded-full bg-emerald-100 text-emerald-800 text-label-xs font-bold uppercase">Completed</span>
+</td>
+<td class="px-lg py-md text-right font-body-sm text-body-sm text-outline">2 hours ago</td>
+</tr>
+<!-- Row 5 (Active) -->
+<tr class="table-row-hover cursor-pointer transition-colors" onclick="showDetails('BK-8650')">
+<td class="px-lg py-md font-mono text-mono text-primary font-bold">BK-8650</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium">Robert Lutaaya</td>
+<td class="px-lg py-md font-body-md text-body-md">Ben Mwebaze</td>
+<td class="px-lg py-md">
+<span class="flex items-center gap-xs text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">package_2</span>
+                                        Delivery
+                                    </span>
+</td>
+<td class="px-lg py-md font-body-md text-body-md font-medium text-on-surface">UGX 4,000</td>
+<td class="px-lg py-md">
+<span class="px-sm py-[2px] rounded-full bg-primary-fixed text-on-primary-fixed text-label-xs font-bold uppercase">Active</span>
+</td>
+<td class="px-lg py-md text-right font-body-sm text-body-sm text-outline">3 hours ago</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Detail View Panel (Fixed width on right) -->
+<aside class="w-[400px] border-l border-outline-variant bg-surface-container-low hidden lg:flex flex-col animate-fade-in" id="detailPanel">
+<div class="p-lg border-b border-outline-variant flex items-center justify-between bg-surface">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Booking Details</h2>
+<button class="material-symbols-outlined text-outline hover:text-on-surface" onclick="toggleDetails()">close</button>
+</div>
+<div class="flex-1 overflow-auto custom-scrollbar p-lg space-y-xl">
+<!-- Status Header -->
+<div class="flex items-center gap-md p-md bg-surface border border-outline-variant rounded">
+<div class="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="route">route</span>
+</div>
+<div>
+<div class="text-label-xs font-label-xs text-outline uppercase">Tracking ID</div>
+<div class="font-mono text-body-lg font-bold" id="activeID">BK-9021</div>
+</div>
+<div class="ml-auto">
+<span class="px-sm py-[2px] rounded-full bg-primary-fixed text-on-primary-fixed text-label-xs font-bold">ONGOING</span>
+</div>
+</div>
+<!-- Map Preview -->
+<div class="h-40 rounded-xl bg-surface-container-highest border border-outline-variant relative overflow-hidden group">
+<img class="w-full h-full object-cover opacity-80 transition-transform duration-500 group-hover:scale-110" data-location="Kampala" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-JNeAFTrs38_pZ22HwhAEVtlwxLw5xY4ADDtCIrrDLQmoJifxgsWHkbZ1CYdzzw8sZtmJr1IMq4tkksJsCBYBDl1KHVuXK-i2CNsMWhPbDIXjAyw0iUjtXrX_JYvSTOLGAPp7MpMhu3anDCbemnUlhKWee8dLUBQhliGG2uxA0rCWjFyQwg_LFsSIBzMiwT1fz-CcUiOXcBpic_lIPP_ruKfypAtLoJ0jXCjy4jnKNSteZOq0964Wy6bmHL7sgngqRLczHzCn4aAL"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+<div class="absolute bottom-sm left-sm flex flex-col gap-unit">
+<span class="bg-surface/90 text-[10px] px-xs py-[2px] rounded border border-outline-variant font-bold text-on-surface shadow-sm">KAMPALA CENTRAL</span>
+</div>
+</div>
+<!-- Pickup/Dropoff -->
+<div class="space-y-md">
+<div class="flex gap-md relative">
+<div class="flex flex-col items-center gap-xs">
+<div class="w-2 h-2 rounded-full bg-primary ring-4 ring-primary-container/20"></div>
+<div class="w-px flex-1 border-l-2 border-dotted border-outline-variant"></div>
+</div>
+<div class="pb-md">
+<div class="text-label-xs font-label-xs text-outline uppercase">Pickup</div>
+<div class="font-body-md text-body-md text-on-surface">Acacia Mall, Kisementi</div>
+</div>
+</div>
+<div class="flex gap-md">
+<div class="flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-tertiary ring-4 ring-tertiary-container/20"></div>
+</div>
+<div>
+<div class="text-label-xs font-label-xs text-outline uppercase">Dropoff</div>
+<div class="font-body-md text-body-md text-on-surface">Makerere University Main Gate</div>
+</div>
+</div>
+</div>
+<!-- Rider Info -->
+<div class="space-y-md pt-md border-t border-outline-variant/30">
+<h3 class="text-label-xs font-label-xs text-outline uppercase tracking-wider">Assigned Rider</h3>
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-lg bg-surface-container overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A rugged and professional Ugandan motorcycle rider profile photo. He is wearing a high-visibility Boda safety vest and a modern black helmet. The portrait style is clean with soft studio lighting, using a professional corporate dashboard aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCCaWG5xej2r6_bPXykYLGYy3KmI-RCihNmu7cgbdtlUDCb3_OZc5-gymh81q6SYE02E6PrLyCGsM4OzjG4EgzTWGf5zIdSvXi9pBxCzRQfRjdmx1GxBHdYP29oK1068AeZ-7OqjSglC3UquKrzyWwy5uX1HUTgPYbJ9io7xslJi0-UQZRBBXE5HjPqVZpTZgHBpj3r6fbaIOeDqmQPFcXLmOkSgB1890t3xVj8-J9d-3l6-EK5qRxaqNp-9aaN62HPXHGt-v-aXdHD"/>
+</div>
+<div class="flex-1">
+<div class="font-body-md text-body-md font-bold text-on-surface">Musa Kato</div>
+<div class="text-body-sm text-body-sm text-outline flex items-center gap-xs">
+<span class="material-symbols-outlined text-[14px]">star</span> 4.9 (2.4k rides)
+                                </div>
+</div>
+<div class="text-right">
+<div class="font-mono text-label-md text-on-surface-variant font-bold">UFB 442D</div>
+<div class="text-label-xs text-outline">Honda XL125</div>
+</div>
+</div>
+</div>
+<!-- Payment Info -->
+<div class="space-y-md pt-md border-t border-outline-variant/30">
+<h3 class="text-label-xs font-label-xs text-outline uppercase tracking-wider">Payment Details</h3>
+<div class="flex items-center justify-between p-md bg-surface border border-outline-variant rounded">
+<div class="flex items-center gap-md">
+<div class="w-10 h-6 bg-[#fedc00] rounded-sm flex items-center justify-center font-black text-[10px] text-black italic">MTN</div>
+<div>
+<div class="text-label-md font-label-md text-on-surface">Mobile Money</div>
+<div class="text-label-xs text-outline">0772 *** 441</div>
+</div>
+</div>
+<div class="text-right">
+<div class="font-body-md text-body-md font-bold text-on-surface">UGX 12,500</div>
+<div class="text-label-xs text-emerald-600 font-bold uppercase">PAID</div>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="grid grid-cols-2 gap-sm pt-md">
+<button class="px-md py-sm border border-outline-variant rounded hover:bg-surface-variant transition-colors font-label-md text-label-md text-on-surface-variant">Cancel Booking</button>
+<button class="px-md py-sm bg-primary text-on-primary rounded hover:opacity-90 transition-opacity font-label-md text-label-md">Contact Rider</button>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<!-- Micro-interactions Script -->
+<script>
+        function showDetails(bookingId) {
+            const panel = document.getElementById('detailPanel');
+            const activeIdEl = document.getElementById('activeID');
+            
+            // Remove hidden class if present
+            panel.classList.remove('hidden');
+            
+            // Highlight text for simulated change
+            activeIdEl.innerText = bookingId;
+            
+            // Visual feedback on the table rows could be added here
+        }
+
+        function toggleDetails() {
+            const panel = document.getElementById('detailPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        // Initialize with first row selected visually for desktop
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.innerWidth > 1024) {
+                showDetails('BK-9021');
+            }
+        });
+    </script>
+</body></html>
