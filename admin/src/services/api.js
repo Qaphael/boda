@@ -27,7 +27,7 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  sendOTP: (phone) => api.post('/auth/send-otp', { phone }),
+  sendOTP: (phone) => api.post('/auth/send-otp', { phone, digits: 6 }),
   verifyOTP: (phone, otp) => api.post('/auth/verify-otp', { phone, otp }),
   logout: (refreshToken) => api.post('/auth/logout', { refreshToken }),
 };

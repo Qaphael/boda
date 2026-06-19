@@ -3,7 +3,7 @@ const { redis } = require('../config/redis');
 const jwt = require('jsonwebtoken');
 
 const OTP_EXPIRY = 5 * 60; // 5 minutes in seconds
-const OTP_LENGTH = 6;
+const DEFAULT_OTP_LENGTH = 4;
 const MAX_OTP_ATTEMPTS = 3;
 const MAX_OTP_ATTEMPTS_PER_IP = 10;
 const MAX_VERIFY_ATTEMPTS = 5;
@@ -33,7 +33,10 @@ const sendOTP = async (req, reply) => {
       return reply.status(429).send({ error: 'Too many requests from this IP. Try again later.' });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpLength = parseInt(req.body.digits) || DEFAULT_OTP_LENGTH;
+    const min = Math.pow(10, otpLength - 1);
+    const max = Math.pow(10, otpLength);
+    const otp = Math.floor(min + Math.random() * (max - min)).toString();
 
     await redis.setEx(`otp:${phone}`, OTP_EXPIRY, otp);
     await redis.incr(rateLimitKey);

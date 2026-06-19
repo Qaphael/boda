@@ -129,7 +129,7 @@ export default function Login() {
                 </button>
                 <h2 className="text-headline-sm mb-1">Verify your code</h2>
                 <p className="text-body-sm text-on-surface-variant">
-                  We've sent a 6-digit code to <span className="font-medium text-on-surface">+254 {phone}</span>
+                  We've sent a 6-digit code to <span className="font-medium text-on-surface">+256 {phone}</span>
                 </p>
               </div>
               {error && (
