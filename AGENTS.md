@@ -736,6 +736,13 @@ const [dashRes, ridersRes, ticketsRes] = await Promise.all([
 
 **Rule**: After creating a component, verify it's imported by at least one file. If unused, delete it immediately.
 
+### 29. OTP Length Must Match Backend
+**Mistake**: Mobile apps had 4-digit OTP inputs but backend generated 6-digit codes. Users couldn't log in.
+
+**Fix**: Backend uses `digits` parameter (default: 4 for mobile, 6 for admin). Mobile apps use 4-digit inputs.
+
+**Rule**: Always verify OTP length matches between frontend inputs and backend generation.
+
 ---
 
 ## Mobile App Design System (Customer + Rider)
