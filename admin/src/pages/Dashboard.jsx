@@ -53,8 +53,19 @@ export default function Dashboard() {
       });
     }
 
-    if (event === 'dashboard:refresh') {
-      loadRef.current?.();
+    if (event === 'booking:created') {
+      setStats(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          bookings: {
+            ...prev.bookings,
+            total: (prev.bookings?.total || 0) + 1,
+            active: (prev.bookings?.active || 0) + 1,
+            today: (prev.bookings?.today || 0) + 1,
+          },
+        };
+      });
     }
   }, []);
 
