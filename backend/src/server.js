@@ -55,17 +55,16 @@ const start = async () => {
     });
 
     io.on('connection', async (socket) => {
-      console.log('Client connected:', socket.id);
+      console.log('Client connected:', socket.id, 'role:', socket.userRole, 'phone:', socket.userPhone);
 
       if (socket.userRole === 'admin') {
         socket.join('admin:dashboard');
+        console.log('Admin joined admin:dashboard room:', socket.id);
       }
 
       let riderId = null;
-      if (socket.userRole === 'rider') {
-        const rider = await pool.query('SELECT id FROM riders WHERE phone = $1 AND is_deleted = false', [socket.userPhone]);
-        if (rider.rows.length > 0) riderId = rider.rows[0].id;
-      }
+      const riderLookup = await pool.query('SELECT id FROM riders WHERE phone = $1 AND is_deleted = false', [socket.userPhone]);
+      if (riderLookup.rows.length > 0) riderId = riderLookup.rows[0].id;
 
       socket.on('rider:location', async ({ riderId: payloadRiderId, lat, lng, bookingId }) => {
         if (socket.userRole !== 'rider' && socket.userRole !== 'admin') return;
@@ -73,6 +72,11 @@ const start = async () => {
         if (!actualRiderId) return;
 
         await redis.hSet('riders:online', actualRiderId, JSON.stringify({ lat, lng, updatedAt: Date.now() }));
+
+        await pool.query(
+          'UPDATE riders SET current_lat = $1, current_lng = $2 WHERE id = $3',
+          [lat, lng, actualRiderId]
+        ).catch(() => {});
 
         if (bookingId) {
           io.to(`booking:${bookingId}`).emit('rider:moved', { lat, lng });
@@ -111,6 +115,7 @@ const start = async () => {
         if (riderId) {
           await redis.hSet('riders:online', riderId, JSON.stringify({ is_online: true, updatedAt: Date.now() }));
           const onlineCount = await redis.hLen('riders:online');
+          console.log('Rider went online:', riderId, 'total online:', onlineCount);
           io.to('admin:dashboard').emit('rider:status-changed', { riderId, is_online: true, onlineCount });
           io.to('admin:dashboard').emit('dashboard:refresh');
         }
@@ -121,6 +126,7 @@ const start = async () => {
         if (riderId) {
           await redis.hDel('riders:online', riderId);
           const onlineCount = await redis.hLen('riders:online');
+          console.log('Rider went offline:', riderId, 'total online:', onlineCount);
           io.to('admin:dashboard').emit('rider:status-changed', { riderId, is_online: false, onlineCount });
           io.to('admin:dashboard').emit('dashboard:refresh');
         }
