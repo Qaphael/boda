@@ -1,11 +1,19 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { useAuth } from '../context/AuthContext';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
 
 const STEPS = ['Details', 'Verify', 'Done'];
+
+async function uriToBase64(uri) {
+  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  const ext = uri.split('.').pop()?.toLowerCase() || 'jpeg';
+  const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  return `data:${mime};base64,${base64}`;
+}
 
 export default function RegisterScreen({ navigation }) {
   const [step, setStep] = useState(0);
@@ -30,7 +38,11 @@ export default function RegisterScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await register({ phone: rider?.phone, name: form.name, national_id: form.national_id, plate_number: form.plate_number, id_photo: form.id_photo, selfie_photo: form.selfie_photo });
+      let id_photo_b64 = null;
+      let selfie_photo_b64 = null;
+      if (form.id_photo) id_photo_b64 = await uriToBase64(form.id_photo);
+      if (form.selfie_photo) selfie_photo_b64 = await uriToBase64(form.selfie_photo);
+      await register({ phone: rider?.phone, name: form.name, national_id: form.national_id, plate_number: form.plate_number, id_photo: id_photo_b64, selfie_photo: selfie_photo_b64 });
       showModal({ icon: '✅', title: 'Success', message: 'Registration submitted! Awaiting admin verification.', onClose: () => navigation.replace('Main') });
     } catch (err) {
       showModal({ icon: '⚠️', title: 'Error', message: err.response?.data?.error || 'Registration failed' });

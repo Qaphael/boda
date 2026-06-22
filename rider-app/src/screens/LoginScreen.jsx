@@ -15,13 +15,13 @@ import { useModal } from '../components/useModal';
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [step, setStep] = useState('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const { sendOTP, verifyOTP } = useAuth();
-  const otpRefs = [useRef(), useRef(), useRef(), useRef()];
+  const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
   const { showModal, ModalComponent } = useModal();
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function LoginScreen() {
     const newOtp = [...otp];
     newOtp[index] = text;
     setOtp(newOtp);
-    if (text && index < 3) otpRefs[index + 1].current?.focus();
+    if (text && index < 5) otpRefs[index + 1].current?.focus();
     if (newOtp.every(d => d.length === 1)) handleVerifyOTP(newOtp.join(''));
   };
 
@@ -71,7 +71,7 @@ export default function LoginScreen() {
       await verifyOTP(`256${phone}`, code);
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid or expired OTP');
-      setOtp(['', '', '', '']);
+      setOtp(['', '', '', '', '', '']);
       otpRefs[0].current?.focus();
     } finally {
       setLoading(false);
@@ -112,10 +112,10 @@ export default function LoginScreen() {
             </View>
           ) : (
             <View style={styles.otpSection}>
-              <TouchableOpacity onPress={() => { setStep('phone'); setOtp(['', '', '', '']); }} style={styles.backBtn}>
+                <TouchableOpacity onPress={() => { setStep('phone'); setOtp(['', '', '', '', '', '']); }} style={styles.backBtn}>
                 <Text style={styles.backIcon}>←</Text>
               </TouchableOpacity>
-              <Text style={styles.otpLabel}>Enter 4-digit code</Text>
+              <Text style={styles.otpLabel}>Enter 6-digit code</Text>
               <Text style={styles.otpSentTo}>Sent to +256 {phone}</Text>
               <View style={styles.otpRow}>
                 {otp.map((digit, i) => (

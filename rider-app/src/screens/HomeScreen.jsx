@@ -3,11 +3,14 @@ import { View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView } from 're
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
+import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import { riderAPI, bookingAPI } from '../services/api';
 import { useLocationTracking } from '../hooks/useLocationTracking';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
+
+const SOCKET_URL = 'https://boda.ocaya.space';
 
 function buildMapHTML(lat, lng) {
   return `<!DOCTYPE html>
@@ -54,6 +57,10 @@ function buildMapHTML(lat, lng) {
         });
       } catch(e) {}
     };
+
+    window.recenterMap = function(lat, lng) {
+      map.setView([lat, lng], 15, { animate: true });
+    };
   </script>
 </body>
 </html>`;
@@ -67,9 +74,35 @@ export default function HomeScreen({ navigation }) {
   const [earnings, setEarnings] = useState(null);
   const [nearbyBookings, setNearbyBookings] = useState([]);
   const [location, setLocation] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
+  const socketRef = useRef(null);
   const { showModal, ModalComponent } = useModal();
 
   useLocationTracking(rider?.riderId, null);
+
+  useEffect(() => {
+    if (!rider?.token) return;
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      auth: { token: rider.token },
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      if (isOnline) socket.emit('rider:go-online');
+    });
+
+    socket.on('booking:new', (data) => {
+      bookingAPI.getBooking(data.bookingId).then(({ data: bData }) => {
+        const booking = bData.booking;
+        if (booking && booking.status === 'pending') {
+          navigation.navigate('BookingRequest', { booking });
+        }
+      }).catch(() => {});
+    });
+
+    return () => socket.disconnect();
+  }, [rider?.token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,6 +127,16 @@ export default function HomeScreen({ navigation }) {
       loadNearbyBookings();
       const interval = setInterval(loadNearbyBookings, 60000);
       return () => clearInterval(interval);
+    }
+  }, [location]);
+
+  useEffect(() => {
+    if (location && webViewRef.current) {
+      setTimeout(() => {
+        webViewRef.current?.injectJavaScript(
+          `window.recenterMap(${location.lat}, ${location.lng});`
+        );
+      }, 500);
     }
   }, [location]);
 
@@ -138,6 +181,10 @@ export default function HomeScreen({ navigation }) {
       if (profile?.status !== 'verified') { showModal({ icon: '⚠️', title: 'Not Verified', message: 'Your account is not verified yet. Please wait for admin approval.' }); return; }
       await riderAPI.toggleOnline(rider.riderId, value);
       setIsOnline(value);
+      if (socketRef.current) {
+        if (value) socketRef.current.emit('rider:go-online');
+        else socketRef.current.emit('rider:go-offline');
+      }
     } catch (err) { showModal({ icon: '⚠️', title: 'Error', message: 'Failed to update status' }); }
   };
 
@@ -162,14 +209,7 @@ export default function HomeScreen({ navigation }) {
           javaScriptEnabled
         />
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => showModal({
-            icon: '☰', title: 'Menu', message: '',
-            actions: [
-              { label: 'Vehicle Info', onPress: () => navigation.navigate('Vehicle') },
-              { label: 'Help & Support', onPress: () => navigation.navigate('Support') },
-              { label: 'Logout', primary: true, onPress: handleLogout },
-            ],
-          })} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.menuBtn} onPress={() => setShowMenu(true)} activeOpacity={0.7}>
             <Text style={styles.menuIcon}>☰</Text>
           </TouchableOpacity>
           <View style={styles.appBadge}>
@@ -245,6 +285,62 @@ export default function HomeScreen({ navigation }) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      {showMenu && (
+        <View style={styles.menuOverlay}>
+          <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setShowMenu(false)} />
+          <View style={styles.menuSheet}>
+            <View style={styles.menuGrabber}><View style={styles.menuGrabberBar} /></View>
+
+            <View style={styles.menuProfile}>
+              <View style={styles.menuAvatar}>
+                <Text style={styles.menuAvatarText}>{rider?.name?.[0] || profile?.name?.[0] || 'R'}</Text>
+              </View>
+              <View style={styles.menuProfileInfo}>
+                <Text style={styles.menuProfileName}>{profile?.name || rider?.name || 'Rider'}</Text>
+                <Text style={styles.menuProfileMeta}>⭐ {profile?.avg_rating || '--'} • {profile?.plate_number || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('Vehicle'); }} activeOpacity={0.7}>
+              <Text style={styles.menuItemIcon}>🔧</Text>
+              <Text style={styles.menuItemLabel}>Vehicle & Safety</Text>
+              <Text style={styles.menuItemArrow}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('Earnings'); }} activeOpacity={0.7}>
+              <Text style={styles.menuItemIcon}>💰</Text>
+              <Text style={styles.menuItemLabel}>Earnings</Text>
+              <Text style={styles.menuItemArrow}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('Incentives'); }} activeOpacity={0.7}>
+              <Text style={styles.menuItemIcon}>⭐</Text>
+              <Text style={styles.menuItemLabel}>Rewards & Incentives</Text>
+              <Text style={styles.menuItemArrow}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('Support'); }} activeOpacity={0.7}>
+              <Text style={styles.menuItemIcon}>🎧</Text>
+              <Text style={styles.menuItemLabel}>Help & Support</Text>
+              <Text style={styles.menuItemArrow}>›</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('Register'); }} activeOpacity={0.7}>
+              <Text style={styles.menuItemIcon}>📝</Text>
+              <Text style={styles.menuItemLabel}>Update Registration</Text>
+              <Text style={styles.menuItemArrow}>›</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={() => { setShowMenu(false); handleLogout(); }} activeOpacity={0.7}>
+              <Text style={styles.menuItemIcon}>🚪</Text>
+              <Text style={[styles.menuItemLabel, { color: colors.error }]}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       <ModalComponent />
     </View>
   );
@@ -294,4 +390,21 @@ const styles = StyleSheet.create({
   statusCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.outlineVariant, flexDirection: 'row', justifyContent: 'space-between' },
   statusLabel: { ...typography.bodyMd, color: colors.onSurfaceVariant },
   statusValue: { ...typography.bodyMd, fontWeight: '600', textTransform: 'capitalize' },
+  menuOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
+  menuBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  menuSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 32, maxHeight: '80%' },
+  menuGrabber: { alignItems: 'center', paddingVertical: spacing.md },
+  menuGrabberBar: { width: 40, height: 4, backgroundColor: colors.surfaceContainerHighest, borderRadius: 2 },
+  menuProfile: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  menuAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryContainer, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
+  menuAvatarText: { ...typography.headlineMd, color: colors.onPrimaryContainer },
+  menuProfileInfo: { flex: 1 },
+  menuProfileName: { ...typography.titleMd, color: colors.onSurface },
+  menuProfileMeta: { ...typography.labelLg, color: colors.onSurfaceVariant, marginTop: 2 },
+  menuDivider: { height: 1, backgroundColor: colors.outlineVariant, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.md },
+  menuItemIcon: { fontSize: 22, width: 32, textAlign: 'center' },
+  menuItemLabel: { flex: 1, ...typography.titleMd, color: colors.onSurface },
+  menuItemArrow: { fontSize: 22, color: colors.onSurfaceVariant },
+  menuItemDanger: { marginTop: spacing.sm },
 });

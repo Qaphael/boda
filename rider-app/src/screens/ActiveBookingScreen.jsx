@@ -1,28 +1,93 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { io } from 'socket.io-client';
 import { bookingAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { useLocationTracking } from '../hooks/useLocationTracking';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
 
+function buildTripMapHTML(pickup, dropoff) {
+  const pLat = pickup?.lat || 2.77;
+  const pLng = pickup?.lng || 32.29;
+  const dLat = dropoff?.lat || 2.78;
+  const dLng = dropoff?.lng || 32.30;
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    var pl = { decode: function(encoded) {
+      var points = [], index = 0, lat = 0, lng = 0;
+      while (index < encoded.length) {
+        var b, shift = 0, result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 31) << shift; shift += 5; } while (b >= 32);
+        lat += ((result & 1) ? ~(result >> 1) : (result >> 1));
+        shift = 0; result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 31) << shift; shift += 5; } while (b >= 32);
+        lng += ((result & 1) ? ~(result >> 1) : (result >> 1));
+        points.push([lat / 1e5, lng / 1e5]);
+      }
+      return points;
+    }};
+  </script>
+  <style>body{margin:0;padding:0;}#map{width:100vw;height:100vh;}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', { zoomControl: false }).setView([${pLat}, ${pLng}], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '' }).addTo(map);
+    L.circleMarker([${pLat}, ${pLng}], { radius: 8, fillColor: '#22c55e', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
+    L.circleMarker([${dLat}, ${dLng}], { radius: 8, fillColor: '#ba1a1a', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
+    var riderMarker = null;
+    window.updateRiderPosition = function(lat, lng) {
+      if (riderMarker) riderMarker.setLatLng([lat, lng]);
+      else riderMarker = L.marker([lat, lng], { icon: L.divIcon({ className: '', html: '<div style="width:24px;height:24px;border-radius:50%;background:#4285f4;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>', iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(map);
+      map.panTo([lat, lng], { animate: true });
+    };
+    fetch('https://router.project-osrm.org/route/v1/driving/${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=polyline&steps=false')
+      .then(function(r){return r.json();}).then(function(d){
+        if(d.code==='Ok'&&d.routes.length>0){
+          var coords=pl.decode(d.routes[0].geometry);
+          L.polyline(coords,{color:'#6d5e00',weight:5,opacity:0.9}).addTo(map);
+          map.fitBounds(L.polyline(coords).getBounds(),{padding:[40,40]});
+        }
+      }).catch(function(){});
+  </script>
+</body>
+</html>`;
+}
+
 export default function ActiveBookingScreen({ route, navigation }) {
   const { booking } = route.params || {};
+  const { rider } = useAuth();
   const [tripPhase, setTripPhase] = useState('pickup');
   const [loading, setLoading] = useState(false);
   const socketRef = useRef(null);
+  const webViewRef = useRef(null);
   const { showModal, ModalComponent } = useModal();
 
-  useLocationTracking(null, booking?.id);
+  useLocationTracking(rider?.riderId, booking?.id);
 
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket'] });
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      auth: { token: rider?.token },
+    });
     socketRef.current = socket;
     socket.on('connect', () => socket.emit('join:booking', { bookingId: booking?.id }));
-    socket.on('booking:status', (data) => {
-      if (data.status === 'in_progress') setTripPhase('trip');
+    socket.on('rider:moved', (data) => {
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(
+          `window.updateRiderPosition(${data.lat}, ${data.lng});`
+        );
+      }
     });
     return () => socket.disconnect();
   }, [booking?.id]);
@@ -70,6 +135,16 @@ export default function ActiveBookingScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.mapCanvas}>
+        <WebView
+          ref={webViewRef}
+          source={{ html: buildTripMapHTML(
+            { lat: booking?.pickup_lat, lng: booking?.pickup_lng },
+            { lat: booking?.dropoff_lat, lng: booking?.dropoff_lng }
+          )}}
+          style={StyleSheet.absoluteFill}
+          originWhitelist={['*']}
+          javaScriptEnabled
+        />
         <View style={styles.statusPill}>
           <View style={styles.statusDot} />
           <Text style={styles.statusPillText}>{tripPhase === 'pickup' ? 'Heading to Pickup' : 'Trip in Progress'}</Text>
@@ -148,7 +223,7 @@ export default function ActiveBookingScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  mapCanvas: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.surfaceContainerHigh, zIndex: 1 },
+  mapCanvas: { flex: 1, position: 'relative' },
   statusPill: { position: 'absolute', top: 56, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.primaryContainer}ee`, paddingHorizontal: 20, paddingVertical: 10, borderRadius: radius.full, zIndex: 10 },
   statusDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, marginRight: 8 },
   statusPillText: { ...typography.titleMd, color: colors.onPrimaryContainer },

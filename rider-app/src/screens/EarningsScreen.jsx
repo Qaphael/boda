@@ -12,13 +12,14 @@ const PERIODS = [
   { key: 'month', label: 'Month' },
 ];
 
-export default function EarningsScreen({ navigation }) {
+export default function EarningsScreen({ navigation, route }) {
   const { rider } = useAuth();
   const [earnings, setEarnings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [period, setPeriod] = useState('today');
   const [refreshing, setRefreshing] = useState(false);
   const { showModal, ModalComponent } = useModal();
+  const canGoBack = navigation.canGoBack() && route.name === 'Earnings';
 
   useFocusEffect(
     useCallback(() => {
@@ -46,9 +47,11 @@ export default function EarningsScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.menuBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.menuIcon}>←</Text>
-        </TouchableOpacity>
+        {canGoBack ? (
+          <TouchableOpacity style={styles.menuBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <Text style={styles.menuIcon}>←</Text>
+          </TouchableOpacity>
+        ) : <View style={{ width: 40 }} />}
         <Text style={styles.topTitle}>Earnings</Text>
         <View style={{ width: 40 }} />
       </View>

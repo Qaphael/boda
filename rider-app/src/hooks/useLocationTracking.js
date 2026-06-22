@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import { io } from 'socket.io-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
 
@@ -11,18 +12,23 @@ export const useLocationTracking = (riderId, bookingId) => {
   useEffect(() => {
     if (!riderId) return;
 
-    const socket = io(SOCKET_URL, { transports: ['websocket'] });
-    socketRef.current = socket;
+    let socket;
+    let cancelled = false;
 
-    socket.on('connect', () => {
-      console.log('Connected to server');
-    });
+    (async () => {
+      const token = await AsyncStorage.getItem('rider_token');
+      if (cancelled) return;
 
-    socket.on('disconnect', () => {
-      console.log('Disconnected from server');
-    });
+      socket = io(SOCKET_URL, {
+        transports: ['websocket'],
+        auth: { token },
+      });
+      socketRef.current = socket;
 
-    const startTracking = async () => {
+      socket.on('connect', () => {
+        console.log('Location tracking connected');
+      });
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         console.log('Location permission denied');
@@ -45,17 +51,12 @@ export const useLocationTracking = (riderId, bookingId) => {
           console.error('Location error:', err);
         }
       }, 3000);
-    };
-
-    startTracking();
+    })();
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      cancelled = true;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (socket) socket.disconnect();
     };
   }, [riderId, bookingId]);
 

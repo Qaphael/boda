@@ -54,14 +54,21 @@ const start = async () => {
       }
     });
 
-    io.on('connection', (socket) => {
+    io.on('connection', async (socket) => {
       console.log('Client connected:', socket.id);
 
-      socket.on('rider:location', async ({ riderId, lat, lng, bookingId }) => {
-        if (socket.userRole !== 'rider' && socket.userRole !== 'admin') return;
-        if (socket.userRole === 'rider' && socket.userId !== riderId) return;
+      let riderId = null;
+      if (socket.userRole === 'rider') {
+        const rider = await pool.query('SELECT id FROM riders WHERE phone = $1 AND is_deleted = false', [socket.userPhone]);
+        if (rider.rows.length > 0) riderId = rider.rows[0].id;
+      }
 
-        await redis.hSet('riders:online', riderId, JSON.stringify({ lat, lng, updatedAt: Date.now() }));
+      socket.on('rider:location', async ({ riderId: payloadRiderId, lat, lng, bookingId }) => {
+        if (socket.userRole !== 'rider' && socket.userRole !== 'admin') return;
+        const actualRiderId = riderId || payloadRiderId;
+        if (!actualRiderId) return;
+
+        await redis.hSet('riders:online', actualRiderId, JSON.stringify({ lat, lng, updatedAt: Date.now() }));
 
         if (bookingId) {
           io.to(`booking:${bookingId}`).emit('rider:moved', { lat, lng });
@@ -83,6 +90,23 @@ const start = async () => {
       socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
       });
+
+      socket.on('rider:go-online', () => {
+        socket.join('riders:online');
+      });
+
+      socket.on('rider:go-offline', () => {
+        socket.leave('riders:online');
+      });
+    });
+
+    const redisSub = redis.duplicate();
+    await redisSub.connect();
+    await redisSub.subscribe('booking:created', (message) => {
+      try {
+        const data = JSON.parse(message);
+        io.to('riders:online').emit('booking:new', data);
+      } catch (e) {}
     });
 
     fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
