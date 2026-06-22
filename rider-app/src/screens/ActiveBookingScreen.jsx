@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking, PanResponder } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { io } from 'socket.io-client';
 import { bookingAPI } from '../services/api';
 import { useLocationTracking } from '../hooks/useLocationTracking';
@@ -25,7 +25,7 @@ export default function ActiveBookingScreen({ route, navigation }) {
       if (data.status === 'in_progress') setTripPhase('trip');
     });
     return () => socket.disconnect();
-  }, []);
+  }, [booking?.id]);
 
   const handleConfirmPickup = async () => {
     setLoading(true);
@@ -40,7 +40,7 @@ export default function ActiveBookingScreen({ route, navigation }) {
   const handleCompleteTrip = async () => {
     setLoading(true);
     try {
-      await bookingAPI.completeBooking(booking.id, booking.fare_estimate);
+      await bookingAPI.completeBooking(booking.id);
       navigation.replace('TripDetails', { booking });
     } catch (err) {
       showModal({ icon: '⚠️', title: 'Error', message: 'Failed to complete trip' });
@@ -82,7 +82,7 @@ export default function ActiveBookingScreen({ route, navigation }) {
         </View>
         <View style={styles.customerInfo}>
           <Text style={styles.customerName}>{booking?.customer_name || 'Customer'}</Text>
-          <Text style={styles.customerMeta}>⭐ {booking?.customer_rating || '4.9'} • {booking?.customer_trips || 0} trips</Text>
+          <Text style={styles.customerMeta}>⭐ {booking?.customer_rating || '--'} • {booking?.customer_trips || 0} trips</Text>
         </View>
         <View style={styles.contactBtns}>
           <TouchableOpacity style={styles.callBtn} onPress={() => { const p = booking?.customer_phone; p ? Linking.openURL(`tel:${p}`) : showModal({ icon: '⚠️', title: 'Error', message: 'Phone not available' }); }} activeOpacity={0.7}>

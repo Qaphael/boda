@@ -1,116 +1,217 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useModal } from '../components/useModal';
-import { useAuth } from '../context/AuthContext';
+import { profileAPI, bookingAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
+import { useCallback } from 'react';
 
-const MOCK_PAYMENT_METHODS = [
-  { id: 'mtn', name: 'MTN MoMo', number: '•••• •892', color: '#FFCC00', active: true },
-  { id: 'airtel', name: 'Airtel Money', number: '•••• •415', color: '#FF0000', active: false },
-];
+const PAYMENT_COLORS = {
+  mtn: '#FFCC00',
+  airtel: '#ED1C24',
+  cash: '#4CAF50',
+};
 
-const MOCK_TRANSACTIONS = [
-  { id: 1, title: 'Ride to Gulu Market', time: 'Today, 10:24 AM', amount: -3500, status: 'Success', icon: '🏍', bgColor: colors.primaryContainer },
-  { id: 2, title: 'Wallet Top-up', time: 'Yesterday, 4:15 PM', amount: 20000, status: 'Success', icon: '💳', bgColor: colors.secondaryContainer },
-  { id: 3, title: 'Failed Ride Request', time: 'May 12, 11:30 AM', amount: 0, status: 'Cancelled', icon: '⚠️', bgColor: colors.errorContainer },
-  { id: 4, title: 'Ride to Lacor Hosp.', time: 'May 11, 09:12 AM', amount: -7000, status: 'Success', icon: '🏍', bgColor: colors.primaryContainer },
-];
-
-export default function WalletScreen() {
+export default function WalletScreen({ navigation }) {
   const { showModal, ModalComponent } = useModal();
-  const [paymentMethods, setPaymentMethods] = useState(MOCK_PAYMENT_METHODS);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [stats, setStats] = useState({ totalSpent: 0, totalRides: 0, totalDeliveries: 0 });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleTopUp = () => {
-    showModal({ icon: '💳', title: 'Top Up Wallet', message: 'MTN MoMo and Airtel Money top-up coming soon.' });
+  const fetchData = async () => {
+    try {
+      const [paymentRes, bookingRes, profileRes] = await Promise.all([
+        profileAPI.getPaymentMethods().catch(() => ({ data: { methods: [] } })),
+        bookingAPI.getMyBookings().catch(() => ({ data: { bookings: [] } })),
+        profileAPI.getProfile().catch(() => ({ data: { stats: {} } })),
+      ]);
+
+      setPaymentMethods(paymentRes.data.methods || []);
+      setStats(profileRes.data.stats || {});
+
+      const bookings = (bookingRes.data.bookings || []).map(b => ({
+        id: b.id,
+        title: b.type === 'ride'
+          ? `Ride to ${b.dropoff_address || 'Destination'}`
+          : `Delivery to ${b.dropoff_address || 'Destination'}`,
+        time: formatTime(b.created_at),
+        amount: b.fare_final || b.fare_estimate || 0,
+        status: b.status,
+        type: b.type,
+        icon: b.type === 'ride' ? '🏍' : '📦',
+      }));
+
+      setTransactions(bookings);
+    } catch (err) {
+      console.error('Failed to load wallet data:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
-  const handleWithdraw = () => {
-    showModal({ icon: '💰', title: 'Withdraw', message: 'Withdrawal feature coming soon.' });
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
   };
 
-  const handleAddNew = () => {
-    showModal({ icon: '💳', title: 'Add Payment Method', message: 'Add MTN MoMo or Airtel Money to your wallet.' });
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
   };
 
-  const handleSelectMethod = (methodId) => {
-    setPaymentMethods(prev =>
-      prev.map(m => ({ ...m, active: m.id === methodId }))
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return colors.primary;
+      case 'cancelled': return colors.error;
+      case 'pending': return colors.onSurfaceVariant;
+      case 'accepted':
+      case 'in_progress': return '#FF9800';
+      default: return colors.onSurfaceVariant;
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'completed': return 'Completed';
+      case 'cancelled': return 'Cancelled';
+      case 'pending': return 'Pending';
+      case 'accepted': return 'Accepted';
+      case 'in_progress': return 'In Progress';
+      default: return status;
+    }
+  };
+
+  const defaultPayment = paymentMethods.find(m => m.is_default);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
     );
-  };
+  }
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        {/* Balance Card */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceContent}>
-            <Text style={styles.balanceLabel}>Current Balance</Text>
+            <Text style={styles.balanceLabel}>Total Spent</Text>
             <View style={styles.balanceRow}>
               <Text style={styles.currency}>UGX</Text>
-              <Text style={styles.amount}>45,250</Text>
+              <Text style={styles.amount}>{Number(stats.total_spent || 0).toLocaleString()}</Text>
             </View>
-            <View style={styles.balanceActions}>
-              <TouchableOpacity style={styles.topUpBtn} onPress={handleTopUp} activeOpacity={0.8}>
-                <Text style={styles.topUpIcon}>＋</Text>
-                <Text style={styles.topUpText}>Top Up</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.withdrawBtn} onPress={handleWithdraw} activeOpacity={0.8}>
-                <Text style={styles.withdrawIcon}>💰</Text>
-                <Text style={styles.withdrawText}>Withdraw</Text>
-              </TouchableOpacity>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.total_rides || 0}</Text>
+                <Text style={styles.statLabel}>Rides</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.total_deliveries || 0}</Text>
+                <Text style={styles.statLabel}>Deliveries</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats.total_bookings || 0}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </View>
             </View>
           </View>
           <View style={styles.balanceGlow} />
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Payment Methods</Text>
-            <TouchableOpacity onPress={handleAddNew}>
-              <Text style={styles.addNew}>+ Add New</Text>
-            </TouchableOpacity>
-          </View>
-          {(paymentMethods || []).map((method) => (
-            <TouchableOpacity key={method.id} style={styles.methodCard} onPress={() => handleSelectMethod(method.id)} activeOpacity={0.7}>
-              <View style={[styles.methodIcon, { backgroundColor: `${method.color}1a`, borderColor: method.color }]}>
-                <Text style={[styles.methodIconText, { color: method.color === '#FFCC00' ? '#000' : method.color }]}>
-                  {method.name.split(' ')[0]}
+        {/* Default Payment */}
+        {defaultPayment && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Paying with</Text>
+            <View style={styles.defaultMethodCard}>
+              <View style={[styles.methodIcon, { backgroundColor: `${PAYMENT_COLORS[defaultPayment.type] || '#999'}1a` }]}>
+                <Text style={[styles.methodIconText, { color: PAYMENT_COLORS[defaultPayment.type] || '#999' }]}>
+                  {defaultPayment.type.toUpperCase()}
                 </Text>
               </View>
               <View style={styles.methodInfo}>
-                <Text style={styles.methodName}>{method.name}</Text>
-                <Text style={styles.methodNumber}>{method.number}</Text>
-              </View>
-              <Text style={[styles.methodCheck, method.active ? styles.methodCheckActive : null]}>
-                {method.active ? '✓' : '○'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          </View>
-          {(MOCK_TRANSACTIONS || []).map((tx) => (
-            <View key={tx.id} style={styles.txItem}>
-              <View style={[styles.txIconBg, { backgroundColor: tx.bgColor }]}>
-                <Text style={styles.txIcon}>{tx.icon}</Text>
-              </View>
-              <View style={styles.txInfo}>
-                <Text style={styles.txTitle}>{tx.title}</Text>
-                <Text style={styles.txTime}>{tx.time}</Text>
-              </View>
-              <View style={styles.txRight}>
-                <Text style={[styles.txAmount, tx.amount > 0 && styles.txAmountPositive]}>
-                  {tx.amount > 0 ? '+' : ''}{tx.amount === 0 ? '0' : tx.amount.toLocaleString()}
+                <Text style={styles.methodName}>
+                  {defaultPayment.type === 'mtn' ? 'MTN Mobile Money' : defaultPayment.type === 'airtel' ? 'Airtel Money' : 'Cash'}
                 </Text>
-                <Text style={[styles.txStatus, tx.status === 'Cancelled' && styles.txStatusCancelled]}>
-                  {tx.status}
-                </Text>
+                <Text style={styles.methodNumber}>{defaultPayment.phone_number}</Text>
+              </View>
+              <View style={styles.defaultBadge}>
+                <Text style={styles.defaultText}>Default</Text>
               </View>
             </View>
-          ))}
+          </View>
+        )}
+
+        {/* Transactions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Trip History</Text>
+          {transactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyText}>No trips yet</Text>
+              <Text style={styles.emptySub}>Your ride and delivery history will appear here</Text>
+            </View>
+          ) : (
+            transactions.map((tx) => (
+              <TouchableOpacity key={tx.id} style={styles.txItem} onPress={() => navigation.navigate('BookingDetail', { bookingId: tx.id })} activeOpacity={0.7}>
+                <View style={[styles.txIconBg, { backgroundColor: tx.status === 'completed' ? colors.primaryContainer : tx.status === 'cancelled' ? colors.errorContainer : colors.surfaceContainerLow }]}>
+                  <Text style={styles.txIcon}>{tx.icon}</Text>
+                </View>
+                <View style={styles.txInfo}>
+                  <Text style={styles.txTitle} numberOfLines={1}>{tx.title}</Text>
+                  <Text style={styles.txTime}>{tx.time}</Text>
+                </View>
+                <View style={styles.txRight}>
+                  {tx.amount > 0 && (
+                    <Text style={[styles.txAmount, tx.status === 'cancelled' && styles.txAmountCancelled]}>
+                      {tx.status === 'cancelled' ? '' : '-'}UGX {tx.amount.toLocaleString()}
+                    </Text>
+                  )}
+                  <Text style={[styles.txStatus, { color: getStatusColor(tx.status) }]}>
+                    {getStatusLabel(tx.status)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
+
+        {/* Info */}
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>
+            Payments are processed via MoMo escrow. Your money is held securely until your trip is completed.
+          </Text>
+        </View>
+
+        <View style={{ height: 100 }} />
       </ScrollView>
       <ModalComponent />
     </View>
@@ -118,11 +219,8 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    paddingTop: 60,
-  },
+  container: { flex: 1, backgroundColor: colors.background, paddingTop: 56 },
+  centered: { justifyContent: 'center', alignItems: 'center' },
   balanceCard: {
     marginHorizontal: spacing.lg,
     backgroundColor: colors.inverseSurface,
@@ -131,9 +229,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: spacing.xl,
   },
-  balanceContent: {
-    zIndex: 2,
-  },
+  balanceContent: { zIndex: 2 },
   balanceLabel: {
     ...typography.labelLg,
     color: colors.secondaryFixedDim,
@@ -145,7 +241,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 8,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   currency: {
     ...typography.headlineMd,
@@ -156,48 +252,17 @@ const styles = StyleSheet.create({
     color: colors.surfaceBright,
     fontSize: 40,
   },
-  balanceActions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  topUpBtn: {
-    flex: 1,
-    backgroundColor: colors.primaryContainer,
-    borderRadius: radius.lg,
-    paddingVertical: 16,
+  statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  topUpIcon: {
-    fontSize: 16,
-    color: colors.onPrimaryContainer,
-    fontWeight: '700',
-  },
-  topUpText: {
-    ...typography.titleMd,
-    color: colors.onPrimaryContainer,
-    fontWeight: '700',
-  },
-  withdrawBtn: {
-    flex: 1,
-    backgroundColor: colors.surfaceContainerHighest,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: radius.lg,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    padding: spacing.md,
   },
-  withdrawIcon: {
-    fontSize: 16,
-  },
-  withdrawText: {
-    ...typography.titleMd,
-    color: colors.inverseSurface,
-    fontWeight: '700',
-  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statValue: { ...typography.titleMd, color: colors.surfaceBright, fontWeight: '700' },
+  statLabel: { ...typography.labelSm, color: colors.secondaryFixedDim, marginTop: 2 },
+  statDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.2)' },
   balanceGlow: {
     position: 'absolute',
     right: -48,
@@ -208,30 +273,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     opacity: 0.1,
   },
-  section: {
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  sectionHeader: {
+  section: { paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
+  sectionTitle: { ...typography.labelLg, color: colors.primary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
+  defaultMethodCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    gap: spacing.md,
   },
-  sectionTitle: {
-    ...typography.titleMd,
-    color: colors.onSurface,
+  methodIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addNew: {
-    ...typography.labelLg,
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  seeAll: {
-    ...typography.labelLg,
-    color: colors.onSurfaceVariant,
-  },
-  methodCard: {
+  methodIconText: { fontSize: 10, fontWeight: '800' },
+  methodInfo: { flex: 1 },
+  methodName: { ...typography.titleMd, color: colors.onSurface },
+  methodNumber: { ...typography.labelSm, color: colors.onSurfaceVariant, letterSpacing: 2 },
+  defaultBadge: { backgroundColor: colors.primaryContainer, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
+  defaultText: { ...typography.labelSm, color: colors.onPrimaryContainer, fontWeight: '700' },
+  txItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.lg,
@@ -240,92 +307,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineVariant,
     marginBottom: spacing.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  methodIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    marginRight: spacing.md,
-  },
-  methodIconText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  methodInfo: {
-    flex: 1,
-  },
-  methodName: {
-    ...typography.titleMd,
-    color: colors.onSurface,
-  },
-  methodNumber: {
-    ...typography.labelSm,
-    color: colors.onSurfaceVariant,
-    letterSpacing: 2,
-  },
-  methodCheck: {
-    fontSize: 20,
-    color: colors.outlineVariant,
-  },
-  methodCheckActive: {
-    color: colors.primary,
-  },
-  txItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceContainer,
+    gap: spacing.md,
   },
   txIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
   },
-  txIcon: {
-    fontSize: 18,
+  txIcon: { fontSize: 18 },
+  txInfo: { flex: 1 },
+  txTitle: { ...typography.titleMd, color: colors.onSurface },
+  txTime: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  txRight: { alignItems: 'flex-end' },
+  txAmount: { ...typography.titleMd, color: colors.onSurface, fontWeight: '700' },
+  txAmountCancelled: { color: colors.onSurfaceVariant, textDecorationLine: 'line-through' },
+  txStatus: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', marginTop: 2 },
+  emptyState: { alignItems: 'center', paddingVertical: spacing.xl * 2 },
+  emptyIcon: { fontSize: 48, marginBottom: spacing.md },
+  emptyText: { ...typography.titleMd, color: colors.onSurface },
+  emptySub: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 4, textAlign: 'center' },
+  infoBox: {
+    marginHorizontal: spacing.lg,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
   },
-  txInfo: {
-    flex: 1,
-  },
-  txTitle: {
-    ...typography.labelLg,
-    color: colors.onSurface,
-    fontWeight: '700',
-  },
-  txTime: {
-    ...typography.labelSm,
-    color: colors.onSurfaceVariant,
-  },
-  txRight: {
-    alignItems: 'flex-end',
-  },
-  txAmount: {
-    ...typography.labelLg,
-    color: colors.onSurface,
-    fontWeight: '700',
-  },
-  txAmountPositive: {
-    color: colors.tertiary,
-  },
-  txStatus: {
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    color: colors.primary,
-  },
-  txStatusCancelled: {
-    color: colors.error,
-  },
+  infoText: { ...typography.bodySm, color: colors.onSurfaceVariant, lineHeight: 18 },
 });

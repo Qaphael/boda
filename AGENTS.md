@@ -1,866 +1,323 @@
 # AGENTS.md — Boda Project
 
-## Project Overview
+## What Is This
 
-**Boda** is a rides and delivery platform for Gulu, Uganda. It connects customers with verified boda boda (motorcycle) riders for rides and deliveries, with mobile money escrow payments (MTN/Airtel MoMo).
+Boda is a rides and delivery platform for Gulu, Uganda. Customers book boda boda (motorcycle) riders for rides and deliveries. Payments via MTN/Airtel MoMo escrow.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  CLIENT LAYER                    │
-│  Customer App (React Native/Expo)               │
-│  Rider App (React Native/Expo)                  │
-│  Admin Dashboard (React/Vite)                   │
-└──────────────────────┬──────────────────────────┘
-                       │ HTTPS + WebSocket
-┌──────────────────────▼──────────────────────────┐
-│              BACKEND API (Node.js/Fastify)       │
-│  Auth │ Bookings │ Tracking │ Payments │ Ratings │
-└──────┬──────────────────────────────────┬───────┘
-       │                                  │
-┌──────▼──────┐  ┌────────────┐  ┌───────▼────────┐
-│ PostgreSQL  │  │   Redis    │  │  File Storage  │
-│  (Docker)   │  │  (Docker)  │  │  (AWS S3)      │
-└─────────────┘  └────────────┘  └────────────────┘
+Customer App (React Native/Expo)  ─┐
+Rider App (React Native/Expo)     ─┼── HTTPS + WebSocket ──→ Backend API (Fastify) ──→ PostgreSQL (Docker)
+Admin Dashboard (React/Vite)       ─┘                                    └→ Redis (Docker)
 ```
 
 ## Directory Structure
 
 ```
 D:\code\
-├── backend/                  # Node.js + Fastify API server
-│   ├── src/
-│   │   ├── server.js         # Entry point, route registration
-│   │   ├── schema.sql        # Database schema
-│   │   ├── config/           # database.js, redis.js
-│   │   ├── routes/           # auth.js, riders.js, bookings.js, admin.js, support.js, settings.js
-│   │   ├── middleware/        # auth.js (JWT + role checking)
-│   │   ├── services/         # paymentService.js
-│   │   └── __tests__/        # Jest tests
-│   ├── package.json
-│   └── .env.example          # Environment variables template
-├── admin/                    # React + Vite admin dashboard
-│   ├── src/
-│   │   ├── components/       # Layout.jsx (responsive sidebar)
-│   │   ├── pages/            # Login, Dashboard, Riders, Bookings, Payments, Settings, Support
-│   │   ├── context/          # AuthContext.jsx
-│   │   └── services/         # api.js (all admin API calls)
-│   ├── dist/                 # Built output
-│   └── package.json
-├── customer-app/             # React Native (Expo) customer app
-│   ├── src/
-│   │   └── services/api.js   # API client (points to boda.ocaya.space)
-│   ├── app.json              # Expo config
-│   ├── eas.json              # EAS build config
-│   └── package.json
-├── rider-app/                # React Native (Expo) rider app
-│   ├── src/
-│   │   ├── services/api.js   # API client (points to boda.ocaya.space)
-│   │   ├── hooks/            # useLocationTracking.js
-│   │   └── context/          # AuthContext.js
-│   ├── app.json              # Expo config
-│   ├── eas.json              # EAS build config
-│   └── package.json
-├── deploy/                   # Deployment scripts and docs
-│   ├── DEPLOYMENT.md         # Full deployment guide
-│   └── *.sh, *.sql, *.nginx  # Deployment artifacts
-├── docker-compose.yml        # PostgreSQL 15 + Redis 7
-└── Boda_Technical_Documentation.md  # Full technical spec
+├── backend/src/           # Fastify API (server.js is entry, routes/ has handlers)
+├── admin/src/             # React admin dashboard
+├── customer-app/src/      # React Native customer app
+├── rider-app/src/         # React Native rider app
+├── deploy/                # Deployment scripts and DEPLOYMENT.md
+└── docker-compose.yml     # PostgreSQL 15 + Redis 7
 ```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `backend/src/server.js` | Route registration, Socket.io setup |
+| `backend/src/routes/*.js` | API handlers (auth, bookings, riders, admin, profile, support, settings, notifications) |
+| `backend/src/middleware/auth.js` | JWT verification + role checking |
+| `backend/src/schema.sql` | Database schema |
+| `backend/src/migrations/` | SQL migration files |
+| `customer-app/src/services/api.js` | All API methods for customer app |
+| `rider-app/src/services/api.js` | All API methods for rider app |
+| `admin/src/services/api.js` | All API methods for admin dashboard |
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend API | Node.js + Fastify v5 |
-| Database | PostgreSQL 15 (Docker) |
-| Cache / Realtime | Redis 7 (Docker) + Socket.io |
-| Auth | JWT (access + refresh tokens), phone OTP |
-| Admin Dashboard | React 19 + Vite + Tailwind CSS |
-| Mobile Apps | React Native (Expo SDK 56) |
-| Build / Deploy | EAS Build (mobile), systemd + nginx (server) |
+- **Backend**: Node.js + Fastify v5, JWT auth (access + refresh tokens)
+- **Database**: PostgreSQL 15 + PostGIS (Docker), Redis 7 for sessions/cache
+- **Mobile**: React Native (Expo SDK 56), React Navigation v7
+- **Admin**: React 19 + Vite + Tailwind CSS v4
+- **Realtime**: Socket.io (rider location tracking, booking status)
+- **Maps**: Leaflet + OpenStreetMap in WebView (not Google Maps in Expo Go)
+- **Geocoding**: Nominatim (requires `User-Agent` header)
+- **Routing**: OSRM public API for road distance/fare
 
 ## API Base URL
 
-- **Production**: `https://boda.ocaya.space`
-- **Local dev**: `http://localhost:3000`
-
-## Key API Endpoints
-
-### Auth
-- `POST /auth/send-otp` — Send OTP to phone (Ugandan format: `256XXXXXXXXX`)
-- `POST /auth/verify-otp` — Verify OTP, returns JWT + user
-- `POST /auth/refresh` — Refresh access token
-
-### Riders
-- `POST /riders/register` — Register as rider
-- `GET /riders/nearby` — Get nearby riders (auth required)
-- `PATCH /riders/:id/location` — Update GPS location
-- `PATCH /riders/:id/online` — Toggle online status
-
-### Bookings
-- `POST /bookings` — Create ride/delivery booking
-- `GET /bookings/:id` — Get booking details
-- `PATCH /bookings/:id/accept` — Rider accepts
-- `PATCH /bookings/:id/complete` — Complete booking
-- `POST /bookings/:id/rate` — Rate after trip
-
-### Admin (requires `admin` role)
-- `GET /admin/dashboard` — Dashboard stats (riders, bookings, payments, users)
-- `GET /admin/riders/pending` — Pending rider applications
-- `GET /admin/riders/:id` — Rider details + trips + ratings
-- `PATCH /admin/riders/:id/verify` — Approve/reject rider
-- `PATCH /admin/riders/:id/suspend` — Suspend rider
-- `PATCH /admin/riders/:id/reinstate` — Reinstate suspended rider
-- `GET /admin/bookings` — All bookings (filterable by status, type)
-- `GET /admin/bookings/:id` — Booking details + payments + ratings
-- `GET /admin/payments` — All payments (filterable by status)
-- `POST /admin/payments/:id/release` — Release held payment
-- `POST /admin/payments/:id/flag` — Flag suspicious payment
-- `GET /admin/support/tickets` — Support tickets (filterable by status, priority)
-- `GET /admin/support/tickets/:id` — Ticket details + messages
-- `POST /admin/support/tickets` — Create new ticket
-- `PATCH /admin/support/tickets/:id/status` — Update ticket status
-- `POST /admin/support/tickets/:id/messages` — Add reply/note to ticket
-- `GET /admin/settings` — Get all admin settings (grouped by category)
-- `PUT /admin/settings` — Update settings
-- `GET /admin/profile` — Get admin profile
-- `PUT /admin/profile` — Update admin profile
-
-## Environment Variables
-
-See `backend/.env.example` for the full list. Key ones:
-
-```env
-DATABASE_URL=postgresql://boda:boda123@localhost:5432/boda
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=<random-secret>
-JWT_REFRESH_SECRET=<random-secret>
-```
+- Production: `https://boda.ocaya.space`
+- Local: `http://localhost:3000`
 
 ## Common Commands
 
-### Backend (on VPS)
-```bash
-# Service management
-systemctl status boda-api
-systemctl restart boda-api
-journalctl -u boda-api -f          # live logs
-
-# Database
-docker exec boda-postgres psql -U boda -d boda   # connect to DB
-```
-
-### Mobile App Builds (on PC)
+### Backend deploy (from PC)
 ```powershell
-$env:EXPO_TOKEN = "<token>"
-$env:EAS_NO_VCS = "1"
-
-cd D:\code\customer-app
-cmd /c eas.cmd build -p android --profile preview --non-interactive
-
-cd D:\code\rider-app
-cmd /c eas.cmd build -p android --profile preview --non-interactive
+scp -i "$env:USERPROFILE\.ssh\id_rsa" <file> root@212.47.72.186:/root/boda/backend/src/<path>
+ssh -i "$env:USERPROFILE\.ssh\id_rsa" root@212.47.72.186 "systemctl restart boda-api"
 ```
 
-### Admin Dashboard (on PC)
+### Admin deploy
 ```powershell
-cd D:\code\admin
-cmd /c "npx vite build"
-```
-
-## Build Profiles (EAS)
-
-| Profile | Output | Use |
-|---------|--------|-----|
-| `preview` | APK | Direct install on Android |
-| `production` | AAB | Play Store submission |
-| `development` | APK | Dev builds with debugger |
-
-## Important Notes
-
-### Phone Number Format
-All phone numbers use Ugandan format: `256XXXXXXXXX` (12 digits, starts with 256).
-
-### OTP is in Dev Mode
-Currently, OTP codes are logged to the server console (`journalctl -u boda-api -f`) instead of being sent via SMS. Africa's Talking integration is pending.
-
-### Admin Role
-To make a user an admin:
-1. User must exist in `users` table
-2. Insert into `admins` table: `INSERT INTO admins (user_id, is_active) VALUES ('<user-uuid>', true);`
-3. User must log out and back in to get a new JWT with `admin` role
-
-### Node Version Compatibility
-- **VPS**: Node.js 20 (works with npm 10)
-- **Local PC**: Node.js 24 has an npm 11 bug with `caniuse-lite` version parsing. If `npm install` fails with `Invalid Version:`, generate `package-lock.json` on the VPS and copy it to the PC, or use Node.js 20 via nvm.
-
-### Git Not Required
-EAS builds use `EAS_NO_VCS=1` since the project is not in a git repository.
-
-## Deployment
-
-See `deploy/DEPLOYMENT.md` for the full deployment guide including:
-- VPS setup (Docker, Node.js, nginx)
-- Backend deployment (systemd service)
-- Admin dashboard deployment (nginx static files)
-- SSL certificates (Let's Encrypt / certbot)
-- Mobile app builds (EAS Build)
-
-## Custom Setup — What We Did
-
-### VPS Details
-- **IP**: `212.47.72.186`
-- **OS**: Ubuntu (Debian-based)
-- **User**: root
-- **SSH Key**: `~/.ssh/id_rsa` (generated locally)
-- **Docker**: v29.5.3
-- **Docker Compose**: v5.1.4 (plugin)
-- **Node.js**: v20.20.2
-- **Nginx**: v1.24.0 (with SSL via Let's Encrypt)
-
-### What Was Deployed on VPS
-| Service | Port | Status |
-|---------|------|--------|
-| boda-api (Node.js) | 3000 | systemd managed |
-| PostgreSQL 15 (Docker) | 5432 | auto-restart |
-| Redis 7 (Docker) | 6379 | auto-restart |
-| Nginx (reverse proxy) | 80/443 | SSL for all subdomains |
-
-### Live URLs
-| URL | What |
-|-----|------|
-| `https://boda.ocaya.space` | Backend API (reverse proxy to :3000) |
-| `https://admin.ocaya.space` | Admin Dashboard (static files) |
-| `http://212.47.72.186:3000/health` | Direct API health check |
-
-### Files on VPS
-| Path | Description |
-|------|-------------|
-| `/root/boda/` | Project root |
-| `/root/boda/backend/` | Backend Node.js app |
-| `/root/boda/backend/.env` | Environment variables (secrets) |
-| `/root/boda/backend/src/` | Source code |
-| `/root/boda/docker-compose.yml` | Docker config for Postgres + Redis |
-| `/var/www/boda-admin/` | Admin dashboard build files |
-| `/etc/systemd/system/boda-api.service` | Systemd service file |
-| `/etc/nginx/sites-enabled/boda` | Nginx config — API reverse proxy |
-| `/etc/nginx/sites-enabled/boda-admin` | Nginx config — Admin dashboard |
-
-### Commands to SSH into VPS
-```bash
-# From PowerShell (use cmd /c if SSH not in PATH)
-ssh -i ~/.ssh/id_rsa root@212.47.72.186
-```
-
-### Transferring Files to VPS
-```powershell
-# Transfer a single file
-scp -i "$env:USERPROFILE\.ssh\id_rsa" "D:\code\backend\src\server.js" root@212.47.72.186:/root/boda/backend/src/server.js
-
-# Transfer a directory (excluding node_modules)
+cd D:\code\admin && cmd /c "npx vite build"
 scp -i "$env:USERPROFILE\.ssh\id_rsa" -r "D:\code\admin\dist\*" root@212.47.72.186:/var/www/boda-admin/
 ```
 
-### Bugs We Fixed
-
-#### 1. Redis "Socket already opened" (server.js)
-The original `server.js` called `connectRedis()` and then tried to connect `pubClient` (the same object) again. Fix: removed the redundant `connectRedis()` call.
-
-#### 2. Admin Role Missing (auth.js + admins table)
-The `admins` table was missing from the database schema, and the auth code hardcoded `role: 'customer'` in JWTs. Fix:
-- Created `admins` table on VPS
-- Updated `auth.js` to check `admins` table and issue correct role in JWT
-
-#### 3. PostGIS Extension Missing
-The schema requires PostGIS but the Docker PostgreSQL image doesn't include it. Tables were created successfully without it. Not critical for MVP — used for future geo queries.
-
-#### 4. Native PostgreSQL Port Conflict
-Port 5432 was occupied by a pre-installed PostgreSQL. Fix: disabled native PostgreSQL (`systemctl disable postgresql`), used Docker PostgreSQL instead.
-
-### Expo / EAS Build Details
-
-#### Expo Account
-- **Username**: qaphael
-- **Expo Token**: stored in `D:\code\expo-token.txt` (delete after use)
-
-#### Expo Projects
-| App | Project ID | Dashboard |
-|-----|-----------|-----------|
-| Boda (Customer) | `7ead97ed-1081-4bed-afe3-2447e9deab06` | https://expo.dev/accounts/qaphael/projects/boda-customer |
-| Boda Rider | `015496c8-ca9b-4291-825e-37d3473087d0` | https://expo.dev/accounts/qaphael/projects/boda-rider |
-
-#### Build Commands (reference)
+### Mobile app dev
 ```powershell
-$env:EXPO_TOKEN = "<token>"
-$env:EAS_NO_VCS = "1"
-
-# Init project (first time only)
-cd D:\code\customer-app
-cmd /c eas.cmd init --non-interactive --force
-
-cd D:\code\rider-app
-cmd /c eas.cmd init --non-interactive --force
-
-# Build APKs
-cd D:\code\customer-app
-cmd /c eas.cmd build -p android --profile preview --non-interactive
-
-cd D:\code\rider-app
-cmd /c eas.cmd build -p android --profile preview --non-interactive
-
-# Check build status
-cmd /c eas.cmd build:list --limit 1 --json
+cd D:\code\customer-app; npx expo start
 ```
 
-#### Rider App Build Issues (and fixes)
-1. **`@testing-library/react-hooks` peer dep conflict** — required React 16/17 but project uses React 19. Fix: removed it, updated imports to use `@testing-library/react-native`.
-2. **`package-lock.json` out of sync** — EAS runs `npm ci` which requires lock file match. Fix: regenerated lock file on VPS (Node 20, npm 10).
-3. **npm 11 `Invalid Version` bug** — Node 24's npm 11 has a `caniuse-lite` version parsing bug. Fix: generate lock file on VPS, copy `node_modules` from customer-app.
+### Mobile app build
+```powershell
+$env:EXPO_TOKEN = "<token>"; $env:EAS_NO_VCS = "1"
+cd D:\code\customer-app; cmd /c eas.cmd build -p android --profile preview --non-interactive
+```
 
-### Other Services on VPS (not ours)
-The VPS hosts other projects too. Do not touch these:
-- `aitoolkit.service` — AI Toolkit Flask app
-- `chatai.service` — ChatAI system
-- `landverify-backend.service` — LandVerify Uganda API
-- `passport-app.service` — Passport Photo App
-- `vani-agent.service` — Vani Voice Agent
-- Multiple webhook services
-
----
-
-## How to Interact with This Codebase
-
-### Starting Point
-When joining this project, first read this file (`AGENTS.md`) and `deploy/DEPLOYMENT.md`. The backend is already live at `https://boda.ocaya.space`. The admin dashboard is live at `https://admin.ocaya.space`. The customer app APK is built and downloadable from Expo. The rider app APK build is pending (see Current Challenges below).
-
-### Making Backend Changes
-1. Edit files in `D:\code\backend\src\`
-2. Transfer changed files to VPS: `scp -i "$env:USERPROFILE\.ssh\id_rsa" <file> root@212.47.72.186:/root/boda/backend/src/`
-3. Restart the service on VPS: `ssh -i "$env:USERPROFILE\.ssh\id_rsa" root@212.47.72.186 "systemctl restart boda-api"`
-4. Verify: `curl https://boda.ocaya.space/health`
-
-### Making Admin Dashboard Changes
-1. Edit files in `D:\code\admin\src\`
-2. Set API URL: ensure `admin/.env` has `VITE_API_URL=https://boda.ocaya.space`
-3. Build: `cd D:\code\admin && cmd /c "npx vite build"`
-4. Transfer: `scp -i "$env:USERPROFILE\.ssh\id_rsa" -r "D:\code\admin\dist\*" root@212.47.72.186:/var/www/boda-admin/`
-
-### Making Mobile App Changes
-1. Edit files in `customer-app/src/` or `rider-app/src/`
-2. API URL is already set to `https://boda.ocaya.space` in `src/services/api.js`
-3. Build APK:
-   ```powershell
-   $env:EXPO_TOKEN = "see expo-token.txt or ask user"
-   $env:EAS_NO_VCS = "1"
-   cd D:\code\customer-app
-   cmd /c eas.cmd build -p android --profile preview --non-interactive
-   ```
-
-### Testing the API
-The OTP is in dev mode. To test login:
-1. Send OTP request to `https://boda.ocaya.space/auth/send-otp` with phone in format `256XXXXXXXXX`
-2. Check server logs for OTP: `ssh -i "$env:USERPROFILE\.ssh\id_rsa" root@212.47.72.186 "journalctl -u boda-api -f"`
-3. Verify OTP with the code from logs
-
-### Accessing the Database
+### Database access
 ```bash
 ssh -i ~/.ssh/id_rsa root@212.47.72.186
 docker exec -it boda-postgres psql -U boda -d boda
 ```
 
-### Key Tables
-- `users` — customer accounts (phone, name, is_active)
-- `riders` — rider profiles (linked to users, has status, location, plate_number)
-- `bookings` — ride/delivery requests (customer_id, rider_id, status, fares)
-- `payments` — escrow payments (amount, method: mtn/airtel/cash, status)
-- `ratings` — trip ratings (score 1-5, comment)
-- `admins` — admin users (user_id, is_active)
-- `support_tickets` — support tickets (subject, description, priority, category, status, user_id, rider_id)
-- `ticket_messages` — ticket conversation messages (ticket_id, admin_id, message, type)
-- `admin_settings` — platform settings (key, value, category)
-- `rider_rejections` — rejection audit trail
-- `rider_suspensions` — suspension audit trail
-- `payment_flags` — payment flag audit trail
-
----
-
-## Admin Dashboard Design System
-
-### Stack
-- React 19 + Vite + **Tailwind CSS v4** (uses `@theme` in CSS, NOT `tailwind.config.js`)
-- PostCSS via `@tailwindcss/postcss`
-- React Router DOM v7
-- Axios for API calls
-
-### Design Tokens (in `src/index.css` via `@theme`)
-- **Primary**: `#0050cb` (Hyper Blue)
-- **Surface**: `#fbf8ff` (slightly off-white)
-- **Font**: Geist (from jsdelivr CDN), JetBrains Mono for IDs/currency
-- **Icons**: Material Symbols Outlined (Google Fonts)
-- **Radius**: 2px (sm), 4px (lg), 8px (xl), 12px (full)
-- **Spacing**: 4px base unit
-
-### Tailwind v4 Configuration
-**IMPORTANT**: This project uses Tailwind CSS v4 which configures themes in CSS, not in `tailwind.config.js`. The `tailwind.config.js` file has NO effect. All custom colors must be defined in `src/index.css` using the `@theme` block:
-
-```css
-@import "tailwindcss";
-
-@theme {
-  --color-primary: #0050cb;
-  --color-surface: #fbf8ff;
-  /* ... all custom colors ... */
-}
+### Run migrations
+```bash
+ssh -i ~/.ssh/id_rsa root@212.47.72.186
+docker exec -i boda-postgres psql -U boda -d boda < /root/boda/backend/src/migrations/002_profile_features.sql
 ```
 
-### Typography Classes (defined in `src/index.css`)
-Custom typography is defined as plain CSS classes to avoid conflicts with Tailwind's `text-{color}` utilities:
-- `.text-display` — 24px / 32px / weight 600
-- `.text-headline-sm` — 18px / 24px / weight 600
-- `.text-body-lg` — 14px / 20px
-- `.text-body-md` — 13px / 18px
-- `.text-body-sm` — 12px / 16px
-- `.text-label-md` — 12px / 16px / weight 500 / letter-spacing 0.02em
-- `.text-label-xs` — 11px / 14px / weight 500
+### Check API health
+```powershell
+Invoke-WebRequest -Uri "https://boda.ocaya.space/health"
+```
 
-### Responsive Breakpoints
-- `sm:` — 640px (mobile landscape)
-- `md:` — 768px (tablet)
-- `lg:` — 1024px (desktop)
-- Sidebar: fixed on desktop (`lg:static`), slides in on mobile with overlay
-- Detail panels: full-screen overlay on mobile, side panel on desktop (`lg:static`)
-- Tables: horizontal scroll on mobile
-
-### Pages
-| Page | Route | Features |
-|------|-------|----------|
-| Login | `/login` | Phone OTP, 6-digit auto-tab inputs |
-| Dashboard | `/` | 8 stat cards, revenue chart, fleet map, quick actions, rider table |
-| Riders | `/riders` | Filter tabs, table, slide-in detail panel (approve/reject) |
-| Bookings | `/bookings` | Split layout, filterable table, detail panel (pickup/dropoff, rider, payment) |
-| Payments | `/payments` | Stats row, filter tabs, table, flag/release modals |
-| Settings | `/settings` | Secondary nav, profile, system config, notifications, security, regional |
-| Support | `/support` | Stats, ticket queue, conversation thread, knowledge base |
-
-### Admin Login Credentials
-- Phone: `256772100001` (David Okello)
-- OTP: check server logs (`journalctl -u boda-api -f`)
-
-### Seeded Data
-- 15 users, 12 riders (7 verified, 3 pending, 1 suspended), 20 bookings, 17 payments, 14 ratings, 8 support tickets, 6 notifications, 8 support ticket messages
-
----
-
-## Security Audit (Completed June 2026)
-
-Full audit report at `D:\code\deploy\SECURITY_AUDIT.md`. All 17 vulnerabilities fixed:
-
-| Priority | Fixed | Key Changes |
-|----------|-------|-------------|
-| CRITICAL | 1 | Fare manipulation — server calculates fare, ignores client input |
-| HIGH | 5 | WebSocket auth, refresh token role fix, CORS whitelist, Redis password, booking ownership |
-| MEDIUM | 9 | OTP IP rate limiting, verify-otp rate limiting, session invalidation on logout, JWT secret enforcement, rider location spoofing fix, socket room auth, payment validation |
-| LOW | 3 | File upload validation (JPEG/PNG/WebP, 5MB max), generic error messages, soft delete for riders |
-
-### Key Security Changes
-- **Redis password**: `boda_redis_2026!` (in `/root/boda/backend/.env`)
-- **CORS whitelist**: Only `admin.ocaya.space`, `localhost:5173`, `localhost:3000`
-- **JWT secret**: Must be >= 32 characters, server won't start without it
-- **Rate limits**: 10 OTP requests per IP, 5 verify attempts per phone
-- **Soft delete**: `riders.is_deleted` column, all queries filter `is_deleted = false`
-- **Logout**: `POST /auth/logout` invalidates Redis session
-
----
-
-## Current Challenges
-
-### 1. OTP SMS Not Sending
-OTP codes are logged to console only. Africa's Talking SMS integration is not yet implemented. For now, check logs with:
+### Live logs
 ```bash
 ssh -i ~/.ssh/id_rsa root@212.47.72.186 "journalctl -u boda-api -f"
 ```
 
-### 2. PostGIS Extension Missing
-The database schema references PostGIS for geo queries but the Docker PostgreSQL image doesn't include it. Tables were created without it. Not critical for MVP but needed for future proximity-based rider matching.
+### Testing
 
-### 3. No Payment Integration Yet
-The `.env` has placeholder keys for MTN MoMo, Airtel Money, and Africa's Talking. These need real credentials before payments and SMS work in production.
+**Backend (Jest):**
+```bash
+cd D:\code\backend
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+```
 
-### 4. No Real-Time Rider Tracking
-Socket.io is set up and working, but the rider app needs to send location updates continuously. The `useLocationTracking` hook exists but needs testing end-to-end with a real device.
+**Admin (Vitest):**
+```bash
+cd D:\code\admin
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+```
+
+**Rider App (Vitest):**
+```bash
+cd D:\code\rider-app
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+```
+
+**Customer App:**
+```bash
+cd D:\code\customer-app
+npx expo start        # No test script configured
+```
+
+## VPS Details
+
+- IP: `212.47.72.186`, user: `root`, SSH key: `~/.ssh/id_rsa`
+- Services: boda-api (systemd, port 3000), PostgreSQL (Docker, 5432), Redis (Docker, 6379), Nginx (80/443)
+- Live: `https://boda.ocaya.space` (API), `https://admin.ocaya.space` (admin dashboard)
+- Other services on VPS (don't touch): aitoolkit, chatai, landverify-backend, passport-app, vagi-agent
+
+## Database Tables
+
+Core: `users`, `riders`, `bookings`, `payments`, `ratings`, `admins`
+Support: `support_tickets`, `ticket_messages`, `admin_settings`
+Audit: `rider_rejections`, `rider_suspensions`, `payment_flags`
+Profile: `saved_places`, `payment_methods`, `referral_codes`, `referrals`, `emergency_contacts`, `user_settings`, `customer_notifications`
+
+## Backend Routes (registered in server.js)
+
+Auth: `POST /auth/send-otp`, `/auth/verify-otp`, `/auth/refresh`, `/auth/logout`
+Riders: `POST /riders/register`, `GET /riders/nearby`, `PATCH /riders/:riderId/location`, `/riders/:riderId/online`, `GET /riders/:id/profile`, `GET /riders/:riderId/earnings`
+Bookings: `POST /bookings`, `GET /bookings/:id`, `GET /bookings/my/customer`, `GET /bookings/my/rider`, `PATCH /bookings/:id/accept`, `POST /bookings/:id/request-rider`, `PATCH /bookings/:id/start`, `PATCH /bookings/:id/complete`, `PATCH /bookings/:id/cancel`, `POST /bookings/:id/rate`, `POST /deliveries/:id/confirm`
+Profile: `GET /profile/customer`, `PUT /profile/customer`, `GET|POST|PUT|DELETE /profile/saved-places`, `GET|POST|DELETE /profile/payment-methods`, `PATCH /profile/payment-methods/:id/default`, `GET /profile/referral`, `POST /profile/referral/apply`, `GET|POST|DELETE /profile/emergency-contacts`, `GET|PUT /profile/settings`, `GET /profile/notifications`, `PATCH /profile/notifications/:id/read`, `PATCH /profile/notifications/read-all`
+Admin: `/admin/*` (dashboard, riders, bookings, payments, support, settings, profile, notifications)
+
+## How Backend Changes Work
+
+1. Edit file in `D:\code\backend\src\`
+2. `scp` the changed file to VPS
+3. `ssh` to restart: `systemctl restart boda-api`
+4. Verify: `curl https://boda.ocaya.space/health`
+
+## Phone Number Format
+
+All numbers: `256XXXXXXXXX` (12 digits, Ugandan format).
+
+## OTP Dev Mode
+
+OTP codes are logged to server console, not sent via SMS. Check logs to get the code:
+```bash
+ssh -i ~/.ssh/id_rsa root@212.47.72.186 "journalctl -u boda-api -f"
+```
+
+## Making User Admin
+
+```sql
+INSERT INTO admins (user_id, is_active) VALUES ('<user-uuid>', true);
+```
+User must log out and back in for JWT to pick up the `admin` role.
+
+## Node Version
+
+- VPS: Node.js 20 (works fine)
+- Local PC: Node.js 24 has npm 11 bug with `caniuse-lite`. If `npm install` fails with `Invalid Version:`, regenerate `package-lock.json` on VPS and copy it over.
+
+## EAS Build
+
+- Expo account: qaphael
+- Expo token: `D:\code\expo-token.txt`
+- Use `EAS_NO_VCS=1` (no git repo)
+- Customer project ID: `7ead97ed-1081-4bed-afe3-2447e9deab06`
+- Rider project ID: `015496c8-ca9b-4291-825e-37d3473087d0`
+
+## Critical Rules (from production bugs)
+
+### Backend
+- **Parameterized queries only** — never string concatenation in SQL
+- **Cast CASE params** — `$1::varchar` when using `$1` in both SET and CASE WHEN
+- **Server-side fares** — never trust client-submitted fare values
+- **Use JWT IDs** — `req.user.userId`/`req.user.riderId`, never `req.params` for ownership
+- **Re-derive roles on refresh** — look up `admins` table, don't hardcode role
+- **Handle empty PATCH bodies** — `const { x } = req.body || {}`
+- **Rate limit all auth endpoints** — not just send-otp
+- **Generic auth errors** — "Invalid or expired OTP" (never confirm if user exists)
+- **Soft delete** — `is_deleted` column, filter in all queries
+- **Logout invalidates session** — `POST /auth/logout` deletes Redis key
+- **WebSocket auth required** — JWT verification on socket connection
+- **CORS whitelist** — never `origin: true`, list specific domains
+- **JWT secrets >= 32 chars** — server won't start without it
+- **Redis password required** — `boda_redis_2026!`
+
+### Frontend (Admin)
+- **Tailwind v4** — config is in CSS `@theme`, not `tailwind.config.js`
+- **Every button needs onClick** — grep for `<button` after building
+- **No `alert()`** — use styled modals
+- **No hardcoded data** — fetch from API
+
+### Mobile Apps (React Native)
+- **No `Alert.alert()`** — use `useModal` hook + `<AppModal>`
+- **Every TouchableOpacity needs onPress** — grep after building
+- **No hardcoded data** — fetch from API
+- **No localhost URLs** — all point to `https://boda.ocaya.space`
+- **Every stack screen needs back button** — except root tabs
+- **WebView maps**: keep HTML source stable, use `injectJavaScript` for dynamic updates
+- **Nominatim requires User-Agent**: `fetch(url, { headers: { 'User-Agent': 'BodaApp/1.0' } })`
+- **OSRM polyline decoder** must be in WebView HTML
+- **fitBounds with padding** for map centering when bottom sheets overlay
+- **`useFocusEffect`** for screens that refresh on navigation back
+- **Active booking 409** → show modal with View Active + Cancel It
+- **Backend returns `data.bookingId`** not `data.booking?.id`
+- **Run `npx expo-doctor`** after app.json changes (SDK 56 removed `splash` field)
+
+## Security Audit
+
+Completed June 2026. See `deploy/SECURITY_AUDIT.md`. 17 vulnerabilities fixed covering fare manipulation, WebSocket auth, CORS, Redis auth, rate limiting, session management, file uploads, and error message leakage.
 
 ---
 
-## Mistakes Made & Lessons Learned (June 2026)
+## Lessons Learned (Production Bugs)
 
-**Read this section before making ANY changes. These are real bugs that broke the system in production.**
+These are real bugs that broke production. Read before making changes.
 
-### 1. Tailwind CSS v4 — `tailwind.config.js` Does Nothing
-**Mistake**: Wrote custom colors in `tailwind.config.js` and expected them to work. All pages rendered with no styling.
+### Backend
 
-**Root cause**: This project uses **Tailwind CSS v4** (`@tailwindcss/postcss`), which configures themes in CSS via `@theme`, not in `tailwind.config.js`. The JS config file is completely ignored.
+**1. Fare manipulation** — `completeBooking` accepted `fare_final` from request body. Rider could set fare to 0. Fix: always use server-calculated fare. Rule: ANY financial calculation must be server-side. Client values are untrusted.
 
-**Fix**: All custom colors MUST be defined in `src/index.css`:
-```css
-@import "tailwindcss";
-@theme {
-  --color-primary: #0050cb;
-  --color-surface: #fbf8ff;
-  /* ... */
-}
-```
+**2. Location spoofing** — `updateLocation` used `req.params.riderId`. Any rider could update another rider's location. Fix: use `req.user.riderId` from JWT. Rule: for resource ownership, always use authenticated user's ID from JWT, never URL params.
 
-**Rule**: Before writing any Tailwind config, check which version is installed. V4 = CSS config. V3 = JS config.
+**3. Role hardcoding on refresh** — `refreshAccessToken` hardcoded `role: 'customer'`. Admins got demoted on token refresh. Fix: look up `admins` table on every refresh. Rule: role must be re-verified from DB on every token refresh.
 
-### 2. Font CDN URLs Must Be Correct
-**Mistake**: Used `cdn.jsdelivr.net/font/geist/Geist-Regular.woff2` — all fonts 404'd.
+**4. PostgreSQL CASE type inference** — `CASE WHEN $1 = 'resolved'` caused `500 error: inconsistent types deduced for parameter $1`. Fix: cast with `$1::varchar`. Rule: when using `$1` in both SET and CASE WHEN, always cast explicitly.
 
-**Fix**: Use `cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/Geist-Regular.woff2`
+**5. Empty PATCH body crash** — `cancelBooking` destructured `{ reason } = req.body` but PATCH sent empty body → crash. Fix: `const { reason } = req.body || {}`. Rule: all PATCH endpoints must handle empty/missing request bodies.
 
-**Rule**: Always test CDN URLs in browser before hardcoding them.
+**6. WebSocket no auth** — Socket.io had no auth. Anyone could connect, spoof rider locations, track any booking. Fix: added JWT verification middleware on socket connection. Rule: ALL WebSocket connections must authenticate.
 
-### 3. CORS Must Allow All HTTP Methods
-**Mistake**: Used `@fastify/cors` with `{ origin: true }` — PATCH and DELETE requests were blocked by browsers.
+**7. Session not invalidated on logout** — Logout only cleared localStorage. Refresh token in Redis stayed valid for 7 days. Fix: `POST /auth/logout` deletes Redis session key. Rule: always provide logout endpoint that invalidates server-side sessions.
 
-**Fix**:
-```js
-await fastify.register(cors, {
-  origin: ['https://admin.ocaya.space', 'http://localhost:5173'],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-});
-```
+**8. CORS too permissive** — `origin: true` reflected any requesting origin. Fix: explicit whitelist `['https://admin.ocaya.space', 'http://localhost:5173']`. Rule: never use `origin: true` in production.
 
-**Rule**: Always list all HTTP methods explicitly. Never use `origin: true` in production — whitelist specific domains.
+**9. Redis no password** — If VPS compromised, all sessions/OTPs exposed. Fix: set `requirepass` in Redis config. Rule: every service must have authentication.
 
-### 4. PostgreSQL Type Inference Fails with CASE Expressions
-**Mistake**: SQL query `CASE WHEN $1 = 'resolved' THEN NOW() ELSE resolved_at END` caused `500 error: inconsistent types deduced for parameter $1`.
+**10. Weak JWT secrets** — No minimum length enforced. Fix: server won't start if `JWT_SECRET` < 32 chars. Rule: enforce minimum secret length at startup.
 
-**Fix**: Cast parameters explicitly: `$1::varchar = 'resolved'`
+**11. Missing rate limiting** — Only `/send-otp` had rate limiting. `/verify-otp` had none — unlimited brute force. Fix: added per-phone and per-IP rate limiting on both. Rule: rate limit ALL auth endpoints.
 
-**Rule**: When using `$1` in both SET and CASE WHEN in the same query, always cast with `::varchar` or `::text`.
+**12. Error messages leak user existence** — "No OTP found. Request a new one." confirmed phone numbers exist. Fix: "Invalid or expired OTP" — same message for both cases. Rule: auth error messages must never confirm whether a resource exists.
 
-### 5. Fare Calculation Must Be Server-Side Only
-**Mistake**: `completeBooking` accepted `fare_final` from the request body. A rider could set fare to 0 or 1,000,000.
+**13. File upload no validation** — Rider photos accepted any content — no type, size, or format check. Fix: validate JPEG/PNG/WebP, 5MB max. Rule: validate ALL file uploads.
 
-**Fix**: Always use server-calculated fare:
-```js
-const finalFare = booking.rows[0].fare_estimate; // Never trust client input
-```
+### Frontend (Admin)
 
-**Rule**: ANY financial calculation (fares, payments, splits) must be done server-side. Client values are untrusted.
+**14. Hardcoded dashboard data** — Dashboard had hardcoded rider names, ticket counts, stats. Data never matched reality. Fix: all data from API calls. Rule: NEVER hardcode data in UI.
 
-### 6. Never Use `req.params` for Authenticated Resources
-**Mistake**: `updateLocation` used `req.params.riderId` — any rider could update another rider's location.
+**15. Dead buttons** — 13 buttons across 4 pages had no onClick handlers. Fix: every button must have an onClick. Rule: after building any page, grep for `<button` and verify every one has an onClick.
 
-**Fix**: Use `req.user.riderId` from the JWT:
-```js
-const riderId = req.user.riderId; // From JWT, not params
-```
+**16. `alert()` usage** — Used `alert()` for payment details and rider info. Looks unprofessional. Rule: never use `alert()` or `confirm()` in production UI. Use styled modals.
 
-**Rule**: For resource ownership, always use the authenticated user's ID from the JWT, never from URL params.
+**17. Soft delete vs hard delete** — `DELETE FROM riders` permanently destroyed data. Fix: added `is_deleted` boolean column. Rule: use soft delete for any user-generated data.
 
-### 7. Refresh Token Must Re-derive Role from Database
-**Mistake**: `refreshAccessToken` hardcoded `role: 'customer'`. Admins got demoted on refresh.
+### Mobile Apps (React Native)
 
-**Fix**: Look up role from database:
-```js
-const adminCheck = await pool.query('SELECT id FROM admins WHERE user_id = $1 AND is_active = true', [decoded.userId]);
-const role = adminCheck.rows.length > 0 ? 'admin' : 'customer';
-```
+**18. `Alert.alert()` usage** — 42 calls across both mobile apps. Rule: NEVER use `Alert.alert()`. Always use `useModal` hook + `<AppModal>`.
 
-**Rule**: Role must be re-verified from DB on every token refresh. Never hardcode roles.
+**19. TouchableOpacity without onPress** — 21 TouchableOpacity elements across 5 screens had no onPress. Rule: after building any RN screen, grep for `<TouchableOpacity` and verify every one has an onPress.
 
-### 8. Sessions Must Be Invalidated on Logout
-**Mistake**: Logout only cleared localStorage. The refresh token in Redis remained valid for 7 days.
+**20. Wrong API method** — Called `bookingAPI.getNearby()` but `getNearby` is defined on `riderAPI`. Would crash. Rule: before calling any API method, verify it exists on the correct API object.
 
-**Fix**: Added `POST /auth/logout` that deletes the Redis session key.
+**21. Unreachable screens** — `DeliveryDetailsScreen` was registered in App.js but no screen navigated to it. Rule: after adding a screen, grep for `navigate('ScreenName')` to verify it's reachable.
 
-**Rule**: Always provide a logout endpoint that invalidates server-side sessions.
+**22. Missing back button** — `BookingDetailScreen` had no back button — users trapped. Rule: every stack screen (not root tab) must have a back button.
 
-### 9. WebSocket Connections Need Authentication
-**Mistake**: Socket.io had no auth — anyone could connect, spoof rider locations, or track any booking.
+**23. Expo SDK 56 removed `splash`** — Kept `splash: { backgroundColor }` in app.json — schema validation failed. Rule: run `npx expo-doctor` after any app.json change.
 
-**Fix**: Added JWT verification middleware on Socket.io connection:
-```js
-io.use((socket, next) => {
-  const token = socket.handshake.auth?.token;
-  if (!token) return next(new Error('Authentication required'));
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  socket.userId = decoded.userId;
-  next();
-});
-```
+**24. Socket URLs pointing to localhost** — `useLocationTracking.js` had `SOCKET_URL = 'http://localhost:3000'`. Rule: all hardcoded URLs in mobile apps must point to production. Never use localhost in shipped code.
 
-**Rule**: ALL WebSocket connections must authenticate. Never allow anonymous socket connections.
+**25. Orphaned components** — `BottomNav.jsx` created but never imported. Rule: after creating a component, verify it's imported by at least one file.
 
-### 10. Hardcoded Data in Dashboard
-**Mistake**: Dashboard had hardcoded rider names, ticket counts, stats. Data never matched reality.
+**26. OTP length mismatch** — Mobile apps had 4-digit OTP inputs but backend generated 6-digit codes. Users couldn't log in. Rule: always verify OTP length matches between frontend and backend.
 
-**Fix**: All data comes from API calls:
-```js
-const [dashRes, ridersRes, ticketsRes] = await Promise.all([
-  adminAPI.getDashboard(),
-  adminAPI.getPendingRiders({ limit: 50 }),
-  adminAPI.getTickets({ limit: 1 }),
-]);
-```
+**27. AppModal crash on undefined actions** — `AppModal` called `actions.map()` unconditionally. Modal visible=false still evaluates children. Fix: `(actions || []).map(...)`. Rule: always null-guard array operations in components that may receive undefined props.
 
-**Rule**: NEVER hardcode data in UI. Always fetch from API. If API doesn't have the data, build the endpoint first.
+**28. WebView reloads lose injectJavaScript** — Put dropoff coordinates in WebView `source={{ html }}`. Every change reloaded entire WebView, losing dynamic updates. Fix: keep HTML source stable, use `injectJavaScript` for dynamic data. Rule: never put frequently-changing state in WebView source HTML.
 
-### 11. Every Button Must Have an onClick
-**Mistake**: 13 buttons across 4 pages had no onClick handlers — they looked clickable but did nothing.
+**29. Nominatim no User-Agent** — Nominatim fetch failed with JSON parse error. Returns HTML error page without User-Agent header. Fix: add `User-Agent: 'AppName/1.0'` to all Nominatim requests. Rule: always include User-Agent header for Nominatim.
 
-**Fix**: Every `<button>` must have an onClick. Dead buttons destroy user trust. If a feature isn't built yet, don't show the button.
+**30. Active booking 409 not handled** — Backend returns 409 with `activeBookingId` when user has pending booking. Client showed generic error. Fix: parse `activeBookingId`, show modal with "View Active" and "Cancel It" options. Rule: when backend returns conflict errors with entity IDs, always give the user a path to resolve it.
 
-**Rule**: After building any page, grep for `<button` and verify every one has an onClick.
+**31. useFocusEffect needed** — HomeScreen used `useEffect` to load bookings — only ran on mount. After navigating back, stale data showed. Fix: use `useFocusEffect(useCallback(() => { loadData(); }, []))`. Rule: screens with data that can change while navigating away must use useFocusEffect.
 
-### 12. Use Modals/Panels, Not `alert()`
-**Mistake**: Used `alert()` to display payment details and rider info. Looks unprofessional.
+**32. Fixed pixel positioning** — Used `bottom: 230` for floating action buttons. When bottom sheet grew/shrank, buttons overlapped. Fix: flex layout — map on top, buttons in bottom container. Rule: never use fixed pixel values for elements above variable-height content.
 
-**Fix**: Created proper modal components matching the design system.
+**33. Map centering behind bottom sheet** — `map.setView(lat, lng, zoom)` centered dead-center. User location hidden behind sheet. Fix: `fitBounds` with `paddingBottomRight` to offset above sheet. Rule: when screen has overlays, use fitBounds with padding.
 
-**Rule**: Never use `alert()` or `confirm()` in production UI. Use styled modals.
+**34. Ride and delivery mixed** — NewBookingScreen had both ride and delivery vehicle types. User could switch mid-flow. Fix: separate flows — "Request Ride" → NewBookingScreen, "Send Delivery" → DeliveryDetailsScreen. Rule: keep ride and delivery as completely separate flows.
 
-### 13. Soft Delete > Hard Delete
-**Mistake**: `DELETE FROM riders` permanently destroyed data with no recovery.
+**35. Cancel endpoint empty body** — Cancel API sent empty PATCH body. Backend crashed on `const { reason } = req.body`. Fix: `const { reason } = req.body || {}`. Rule: all PATCH endpoints must handle empty body.
 
-**Fix**: Added `is_deleted` boolean column. All queries filter `WHERE is_deleted = false`.
+**36. Saved places hardcoded** — Profile had hardcoded "Home", "Work", "Market" addresses. Fix: real saved_places table with Nominatim search. Rule: never hardcode location data.
 
-**Rule**: Use soft delete for any user-generated data. Add audit trail tables for compliance.
+**37. Wallet mock data** — WalletScreen had hardcoded balance, payment methods, transactions. Fix: real API calls to profile/payment endpoints. Rule: never hardcode financial data.
 
-### 14. Rate Limit on Every Auth Endpoint
-**Mistake**: Only `/send-otp` had rate limiting. `/verify-otp` had none — unlimited brute force.
+**38. Profile stats hardcoded** — Rating "4.92" and "128 rides" were hardcoded. Fix: real stats from bookings table via profile API. Rule: never hardcode user statistics.
 
-**Fix**: Added per-phone and per-IP rate limiting on both endpoints.
-
-**Rule**: Rate limit ALL authentication endpoints, not just the first one.
-
-### 15. Generic Error Messages
-**Mistake**: Errors like "No OTP found. Request a new one." confirmed phone numbers exist.
-
-**Fix**: Changed to "Invalid or expired OTP" — same message for both cases.
-
-**Rule**: Auth error messages must never confirm whether a resource (user, phone, email) exists.
-
-### 16. File Upload Validation Is Mandatory
-**Mistake**: Rider photos accepted any content — no type, size, or format check.
-
-**Fix**: Added validation for JPEG/PNG/WebP, 5MB max, data URI or URL format.
-
-**Rule**: Validate ALL file uploads: type, size, format. Never store raw user input.
-
-### 17. Redis Needs Authentication
-**Mistake**: Redis had no password. If VPS is compromised, all sessions/OTPs exposed.
-
-**Fix**: Set `requirepass` in Redis config, updated connection string with password.
-
-**Rule**: Every service (Redis, PostgreSQL, etc.) must have authentication enabled.
-
-### 18. JWT Secrets Must Be Strong
-**Mistake**: No minimum length enforced. Weak secrets = forged tokens.
-
-**Fix**: Server won't start if `JWT_SECRET` < 32 characters.
-
-**Rule**: Enforce minimum secret length at startup. Log a warning if using defaults.
-
-### 19. CORS Origins Must Be Whitelisted
-**Mistake**: `origin: true` reflected any requesting origin — effectively allowing all domains.
-
-**Fix**: Explicit whitelist: `['https://admin.ocaya.space', 'http://localhost:5173']`
-
-**Rule**: Never use `origin: true` in production. Always whitelist specific domains.
-
-### 20. Session Invalidation Needs Backend Endpoint
-**Mistake**: Frontend logout only cleared localStorage. Backend session in Redis stayed valid.
-
-**Fix**: Added `POST /auth/logout` endpoint that deletes Redis session key.
-
-**Rule**: Logout must always call a backend endpoint to invalidate the session server-side.
-
-### 21. Every Button Must Have onPress (React Native)
-**Mistake**: 21 TouchableOpacity elements across 5 screens had no onPress — they looked tappable but did nothing.
-
-**Fix**: Every `<TouchableOpacity>` must have an onPress. Use `Alert.alert()` for placeholder actions (or better, styled modals).
-
-**Rule**: After building any RN screen, grep for `<TouchableOpacity` and verify every one has an onPress within 5 lines.
-
-### 22. Never Use Alert.alert() — Use Styled Modals
-**Mistake**: Used `Alert.alert()` across 42 calls in both mobile apps. Looks unprofessional and inconsistent with design system.
-
-**Fix**: Created `AppModal` component + `useModal` hook. Every screen uses `showModal({ icon, title, message, actions })` instead.
-
-**Rule**: NEVER use `Alert.alert()` or `alert()` in React Native. Always use the `useModal` hook + `<AppModal>` component.
-
-### 23. Wrong API Method = Runtime Crash
-**Mistake**: Called `bookingAPI.getNearby()` but `getNearby` is defined on `riderAPI`. Would crash when user's location is obtained.
-
-**Fix**: Import `riderAPI` and call `riderAPI.getNearby()`.
-
-**Rule**: Before calling any API method, verify it exists on the correct API object. Check `src/services/api.js`.
-
-### 24. Every Screen Must Be Reachable
-**Mistake**: `DeliveryDetailsScreen` was registered in App.js but no screen navigated to it — completely unreachable.
-
-**Fix**: Wired "Send Delivery" button on HomeScreen to navigate to DeliveryDetailsScreen.
-
-**Rule**: After adding a screen to App.js, grep for `navigate('ScreenName')` to verify at least one screen targets it.
-
-### 25. Missing Back Button = User Trapped
-**Mistake**: `BookingDetailScreen` had no back button — users had to use system back gesture.
-
-**Fix**: Added a `<TouchableOpacity onPress={navigation.goBack()}>` at the top of the screen.
-
-**Rule**: Every stack screen (not root tab) must have a back button or explicit close action.
-
-### 26. Expo SDK 56 Removed `splash` Config
-**Mistake**: Kept `splash: { backgroundColor: "#..." }` in app.json — Expo SDK 56 schema validation failed.
-
-**Fix**: Removed the `splash` field entirely. Only `adaptiveIcon.backgroundColor` is supported now.
-
-**Rule**: Run `npx expo-doctor` after any app.json change. The `splash` field was removed in SDK 56.
-
-### 27. Socket URLs Must Use Production
-**Mistake**: `useLocationTracking.js` had `SOCKET_URL = 'http://localhost:3000'` — only worked on dev machine.
-
-**Fix**: Changed to `https://boda.ocaya.space`.
-
-**Rule**: All hardcoded URLs in mobile apps must point to production. Never use localhost in shipped code.
-
-### 28. Orphaned Components Waste Space
-**Mistake**: `BottomNav.jsx` was created but never imported anywhere — React Navigation's tab bar handled it.
-
-**Fix**: Deleted the orphaned component.
-
-**Rule**: After creating a component, verify it's imported by at least one file. If unused, delete it immediately.
-
-### 29. OTP Length Must Match Backend
-**Mistake**: Mobile apps had 4-digit OTP inputs but backend generated 6-digit codes. Users couldn't log in.
-
-**Fix**: Backend uses `digits` parameter (default: 4 for mobile, 6 for admin). Mobile apps use 4-digit inputs.
-
-**Rule**: Always verify OTP length matches between frontend inputs and backend generation.
-
----
-
-## Mobile App Design System (Customer + Rider)
-
-### Stack
-- React Native (Expo SDK 56)
-- React Navigation v7 (native-stack + bottom-tabs)
-- Axios for API calls
-- Socket.io-client for real-time
-
-### Design Tokens (in `src/theme.js`)
-Both apps share the same **Kinetic High-Contrast Utility** design system:
-- **Primary**: `#6d5e00` (dark yellow) / **Primary Container**: `#fde047` (bright yellow)
-- **Background**: `#fcf9f8`
-- **Font**: Outfit (all weights)
-- **Touch targets**: 48px minimum for bumpy riding conditions
-- **Bottom sheets**: All interactions in bottom sheets with grabber handles
-
-### Shared Components (in `src/components/`)
-- `AppModal` — Styled modal with icon, title, message, action buttons (replaces Alert.alert)
-- `useModal` — Hook: `const { showModal, ModalComponent } = useModal()`
-- `Grabber` — Bottom sheet grabber handle (40x4px bar)
-
-### Customer App Navigation
-- **Bottom tabs**: Home, Activity, Wallet, Profile
-- **Stack screens**: Login, NewBooking, Tracking, Rating, DeliveryDetails, BookingDetail
-
-### Rider App Navigation
-- **Bottom tabs**: Home, Earnings, Incentives, Help
-- **Stack screens**: Login, Register, Earnings, Vehicle, BookingRequest, ActiveBooking, TripDetails
-
-### Customer App Screens
-| Screen | Route | Features |
-|--------|-------|----------|
-| Login | (auth) | 4-digit OTP, Uganda flag, yellow brand |
-| Home | (tab) | Map canvas, action cards, recent activity bottom sheet |
-| Activity | (tab) | Filter chips, booking history with route viz |
-| Wallet | (tab) | Balance card, payment methods, transactions |
-| Profile | (tab) | Avatar, stats, settings groups, logout |
-| NewBooking | (stack) | Address inputs, vehicle selection, MoMo badge |
-| Tracking | (stack) | Live map, rider info, status pill |
-| Rating | (stack) | Star rating, feedback tags, comment box |
-| DeliveryDetails | (stack) | Recipient form, package size, instructions |
-| BookingDetail | (stack) | Trip details, rider info, rating |
-
-### Rider App Screens
-| Screen | Route | Features |
-|--------|-------|----------|
-| Login | (auth) | 4-digit OTP, Uganda flag, yellow brand |
-| Register | (stack) | 3-step progress stepper, document upload |
-| Home | (tab) | Map, online toggle, stats grid, quick links |
-| Earnings | (tab) | Period tabs, summary card, trip history |
-| Incentives | (tab) | Tier card, progress bar, quests, referrals |
-| Support | (tab) | Search, SOS, categories, tickets, FAQ, chat FAB |
-| Vehicle | (stack) | Vehicle hero, doc status, safety checklist |
-| BookingRequest | (stack) | Incoming booking overlay, countdown, accept/decline |
-| ActiveBooking | (stack) | Trip progress, customer card, confirm pickup |
-| TripDetails | (stack) | Fare breakdown, route viz, payment status |
-
----
-
-## Agent Workflow Checklist
-
-When making changes to this project, follow this order:
-
-### Before Starting
-1. Read this AGENTS.md file completely
-2. Check which Tailwind version is in use (v4 = CSS config)
-3. Check the backend server.js for existing routes
-4. Check the frontend api.js for existing API methods
-
-### When Building Backend
-1. Add route to the appropriate routes file
-2. Export the handler in module.exports
-3. Register the route in server.js with proper auth middleware
-4. Use parameterized queries (`$1`, `$2`) — NEVER string concatenation
-5. Cast types explicitly when using CASE expressions
-6. Add rate limiting on auth endpoints
-7. Use soft delete for user data
-8. Add audit trail for sensitive actions
-
-### When Building Frontend
-1. Add API method to `src/services/api.js`
-2. Import `adminAPI` or `authAPI` in the page component
-3. Every `<button>` MUST have an onClick
-4. Never use `alert()` — use styled modals
-5. Never hardcode data — fetch from API
-6. Make responsive: sidebar toggle on mobile, full-screen overlays for panels
-7. After building, grep for dead buttons: `grep -n "<button" src/pages/*.jsx`
-
-### When Building Mobile Apps (React Native)
-1. Add API method to `src/services/api.js`
-2. Use `useModal` hook + `<AppModal>` for ALL alerts/confirms — NEVER `Alert.alert()`
-3. Every `<TouchableOpacity>` MUST have an onPress
-4. Never hardcode data — fetch from API
-5. Use `src/theme.js` for all colors, typography, spacing — NEVER hardcoded values
-6. Every stack screen must have a back button (except root tabs)
-7. After building, grep for dead buttons: check every TouchableOpacity has onPress
-8. After adding a screen to App.js, verify it's navigated to from at least one screen
-9. Socket URLs must be `https://boda.ocaya.space` — never localhost
-10. Run `npx expo-doctor` after app.json changes (SDK 56 removed `splash` field)
-
-### When Deploying
-1. Build frontend: `cd D:\code\admin && cmd /c "npx vite build"`
-2. Deploy frontend: `scp -r dist/* root@212.47.72.186:/var/www/boda-admin/`
-3. Deploy backend: `scp backend files root@212.47.72.186:/root/boda/backend/src/`
-4. Restart backend: `ssh root@212.47.72.186 "systemctl restart boda-api"`
-5. Verify: `Invoke-WebRequest -Uri "https://boda.ocaya.space/health"`
-6. Hard refresh browser: `Ctrl+Shift+R`
-
-### Security Checklist
-Before any deploy, verify:
-- [ ] No `alert()` or `console.log` with sensitive data
-- [ ] All endpoints have auth middleware
-- [ ] All financial calculations are server-side
-- [ ] CORS is whitelisted (not `origin: true`)
-- [ ] JWT secrets are >= 32 characters
-- [ ] Redis has password
-- [ ] SQL uses parameterized queries
-- [ ] File uploads are validated
-- [ ] Error messages don't leak internals
+**39. Missing payment methods in profile** — Profile showed "coming soon" for payment methods. Fix: full CRUD for MoMo numbers with default selection. Rule: if a feature exists in the backend, wire it up in the frontend.

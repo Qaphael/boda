@@ -1,21 +1,101 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView } from 'react-native';
+import { WebView } from 'react-native-webview';
+import * as Location from 'expo-location';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { riderAPI } from '../services/api';
+import { riderAPI, bookingAPI } from '../services/api';
 import { useLocationTracking } from '../hooks/useLocationTracking';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
 
+function buildMapHTML(lat, lng) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>body{margin:0;padding:0;}#map{width:100vw;height:100vh;}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', { zoomControl: false }).setView([${lat}, ${lng}], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '\\u00a9 OpenStreetMap' }).addTo(map);
+    L.marker([${lat}, ${lng}], {
+      icon: L.divIcon({
+        className: '',
+        html: '<div style="width:16px;height:16px;border-radius:50%;background:#4285f4;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      })
+    }).addTo(map);
+
+    var bookingMarkers = [];
+    window.updateBookings = function(json) {
+      bookingMarkers.forEach(function(m) { map.removeLayer(m); });
+      bookingMarkers = [];
+      try {
+        var bookings = JSON.parse(json);
+        bookings.forEach(function(b) {
+          var type = b.type === 'delivery' ? '\\u{1F4E6}' : '\\u{1F6F5}';
+          var fare = (b.fare_estimate || 0).toLocaleString();
+          var addr = (b.pickup_address || '').replace(/'/g, "\\'");
+          var m = L.marker([parseFloat(b.pickup_lat), parseFloat(b.pickup_lng)], {
+            icon: L.divIcon({
+              className: '',
+              html: '<div style="width:32px;height:32px;border-radius:50%;background:#fde047;border:2px solid #6d5e00;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">' + type + '</div>',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            })
+          }).addTo(map).bindPopup('<b>' + addr + '</b><br>UGX ' + fare);
+          bookingMarkers.push(m);
+        });
+      } catch(e) {}
+    };
+  </script>
+</body>
+</html>`;
+}
+
 export default function HomeScreen({ navigation }) {
   const { rider, logout } = useAuth();
+  const webViewRef = useRef(null);
   const [isOnline, setIsOnline] = useState(false);
   const [profile, setProfile] = useState(null);
   const [earnings, setEarnings] = useState(null);
+  const [nearbyBookings, setNearbyBookings] = useState([]);
+  const [location, setLocation] = useState(null);
   const { showModal, ModalComponent } = useModal();
 
   useLocationTracking(rider?.riderId, null);
 
-  useEffect(() => { loadProfile(); loadEarnings(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+      loadEarnings();
+      loadNearbyBookings();
+    }, [])
+  );
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (location) {
+      loadNearbyBookings();
+      const interval = setInterval(loadNearbyBookings, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [location]);
 
   const loadProfile = async () => {
     try {
@@ -23,6 +103,8 @@ export default function HomeScreen({ navigation }) {
         const { data } = await riderAPI.getProfile(rider.riderId);
         setProfile(data.rider);
         setIsOnline(data.rider?.is_online || false);
+      } else if (rider) {
+        setProfile({ status: rider.status || 'not_registered', avg_rating: rider.avg_rating, plate_number: rider.plate_number, is_online: false });
       }
     } catch (err) { console.error('Failed to load profile:', err); }
   };
@@ -36,10 +118,24 @@ export default function HomeScreen({ navigation }) {
     } catch (err) { console.error('Failed to load earnings:', err); }
   };
 
+  const loadNearbyBookings = async () => {
+    if (!location) return;
+    try {
+      const { data } = await bookingAPI.getMyBookings();
+      const active = (data.bookings || []).filter(b => b.status === 'pending' || b.status === 'accepted');
+      setNearbyBookings(active);
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(
+          `window.updateBookings(${JSON.stringify(JSON.stringify(active))});`
+        );
+      }
+    } catch (err) {}
+  };
+
   const toggleOnline = async (value) => {
     try {
-      if (!rider?.riderId) { showModal({ icon: '⚠️', title: 'Error', message: 'Complete registration first' }); return; }
-      if (profile?.status !== 'verified') { showModal({ icon: '⚠️', title: 'Error', message: 'Account not verified yet' }); return; }
+      if (!rider?.riderId) { showModal({ icon: '⚠️', title: 'Registration Required', message: 'Complete rider registration first to go online.' }); return; }
+      if (profile?.status !== 'verified') { showModal({ icon: '⚠️', title: 'Not Verified', message: 'Your account is not verified yet. Please wait for admin approval.' }); return; }
       await riderAPI.toggleOnline(rider.riderId, value);
       setIsOnline(value);
     } catch (err) { showModal({ icon: '⚠️', title: 'Error', message: 'Failed to update status' }); }
@@ -47,29 +143,40 @@ export default function HomeScreen({ navigation }) {
 
   const handleLogout = () => {
     showModal({
-      icon: '🚪',
-      title: 'Logout',
-      message: 'Are you sure you want to logout?',
-      actions: [
-        { label: 'Cancel' },
-        { label: 'Logout', primary: true, onPress: logout },
-      ],
+      icon: '🚪', title: 'Logout', message: 'Are you sure you want to logout?',
+      actions: [{ label: 'Cancel' }, { label: 'Logout', primary: true, onPress: logout }],
     });
   };
 
+  const mapLat = location?.lat || 2.77;
+  const mapLng = location?.lng || 32.29;
+
   return (
     <View style={styles.container}>
-      <View style={styles.mapCanvas}>
+      <View style={styles.mapContainer}>
+        <WebView
+          ref={webViewRef}
+          source={{ html: buildMapHTML(mapLat, mapLng) }}
+          style={styles.map}
+          originWhitelist={['*']}
+          javaScriptEnabled
+        />
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.menuBtn} onPress={handleLogout} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.menuBtn} onPress={() => showModal({
+            icon: '☰', title: 'Menu', message: '',
+            actions: [
+              { label: 'Vehicle Info', onPress: () => navigation.navigate('Vehicle') },
+              { label: 'Help & Support', onPress: () => navigation.navigate('Support') },
+              { label: 'Logout', primary: true, onPress: handleLogout },
+            ],
+          })} activeOpacity={0.7}>
             <Text style={styles.menuIcon}>☰</Text>
           </TouchableOpacity>
           <View style={styles.appBadge}>
-            <Text style={styles.appBadgeText}>Gulu Express Rider</Text>
+            <Text style={styles.appBadgeText}>Boda Rider</Text>
           </View>
-          <TouchableOpacity style={styles.notifBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.notifBtn} onPress={() => showModal({ icon: '🔔', title: 'Notifications', message: 'No new notifications.' })} activeOpacity={0.7}>
             <Text style={styles.notifIcon}>🔔</Text>
-            <View style={styles.notifDot} />
           </TouchableOpacity>
         </View>
 
@@ -80,6 +187,12 @@ export default function HomeScreen({ navigation }) {
             <Switch value={isOnline} onValueChange={toggleOnline} trackColor={{ false: colors.surfaceContainerHigh, true: colors.primaryContainer }} thumbColor={isOnline ? colors.primary : colors.surfaceContainerHighest} />
           </View>
         </View>
+
+        {nearbyBookings.length > 0 && (
+          <View style={styles.bookingCountBadge}>
+            <Text style={styles.bookingCountText}>{nearbyBookings.length} active booking{nearbyBookings.length > 1 ? 's' : ''}</Text>
+          </View>
+        )}
       </View>
 
       <ScrollView style={styles.bottomSheet} showsVerticalScrollIndicator={false}>
@@ -87,46 +200,47 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{rider?.name?.[0] || 'R'}</Text>
+            <Text style={styles.avatarText}>{rider?.name?.[0] || profile?.name?.[0] || 'R'}</Text>
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{rider?.name || 'Rider'}</Text>
+            <Text style={styles.profileName}>{profile?.name || rider?.name || 'Rider'}</Text>
             <View style={styles.profileMeta}>
-              <Text style={styles.profileRating}>⭐ {profile?.avg_rating || '4.9'}</Text>
+              <Text style={styles.profileRating}>⭐ {profile?.avg_rating || '--'}</Text>
               <Text style={styles.profileDot}>•</Text>
               <Text style={styles.profilePlate}>{profile?.plate_number || 'N/A'}</Text>
             </View>
           </View>
-          <Text style={styles.profileChevron}>›</Text>
         </View>
 
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{earnings?.total_trips || 0}</Text>
             <Text style={styles.statLabel}>Today's Trips</Text>
-            <Text style={styles.statTrend}>+2 from yesterday</Text>
           </View>
           <View style={[styles.statCard, styles.statCardHighlight]}>
             <Text style={styles.statValue}>UGX {(earnings?.total_revenue || 0).toLocaleString()}</Text>
             <Text style={styles.statLabel}>Earnings</Text>
-            <Text style={styles.statTrend}>High demand zone</Text>
           </View>
         </View>
 
         <View style={styles.quickLinks}>
           <TouchableOpacity style={styles.quickLinkCard} onPress={() => navigation.navigate('Earnings')} activeOpacity={0.7}>
             <Text style={styles.quickLinkIcon}>💰</Text>
-            <Text style={styles.quickLinkLabel}>Earnings Detail</Text>
+            <Text style={styles.quickLinkLabel}>Earnings</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickLinkCard} onPress={() => showModal({ icon: '🔧', title: 'Vehicle Status', message: 'Vehicle status coming soon.' })} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.quickLinkCard} onPress={() => navigation.navigate('Vehicle')} activeOpacity={0.7}>
             <Text style={styles.quickLinkIcon}>🔧</Text>
-            <Text style={styles.quickLinkLabel}>Vehicle Status</Text>
+            <Text style={styles.quickLinkLabel}>Vehicle</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickLinkCard} onPress={() => navigation.navigate('Incentives')} activeOpacity={0.7}>
+            <Text style={styles.quickLinkIcon}>⭐</Text>
+            <Text style={styles.quickLinkLabel}>Rewards</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.statusCard}>
           <Text style={styles.statusLabel}>Account Status</Text>
-          <Text style={styles.statusValue}>{profile?.status || 'Not registered'}</Text>
+          <Text style={[styles.statusValue, { color: profile?.status === 'verified' ? '#22c55e' : colors.onSurface }]}>{profile?.status || 'Not registered'}</Text>
         </View>
 
         <View style={{ height: 100 }} />
@@ -138,15 +252,15 @@ export default function HomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  mapCanvas: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.surfaceContainerHighest, zIndex: 1 },
+  mapContainer: { flex: 1, position: 'relative' },
+  map: { ...StyleSheet.absoluteFillObject },
   topBar: { position: 'absolute', top: 56, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, zIndex: 10 },
-  menuBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.outlineVariant, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  menuBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: `${colors.surface}ee`, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   menuIcon: { fontSize: 20, color: colors.onSurface },
-  appBadge: { backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full },
+  appBadge: { backgroundColor: `${colors.primary}ee`, paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full },
   appBadgeText: { ...typography.labelLg, color: colors.onPrimaryContainer, fontWeight: '700' },
-  notifBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.outlineVariant },
+  notifBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: `${colors.surface}ee`, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   notifIcon: { fontSize: 20 },
-  notifDot: { position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.error },
   onlineToggleContainer: { position: 'absolute', top: 120, alignSelf: 'center', zIndex: 10 },
   onlinePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.surface}ee`, paddingHorizontal: 20, paddingVertical: 10, borderRadius: radius.full, borderWidth: 2, borderColor: colors.outlineVariant, gap: 10 },
   onlinePillActive: { borderColor: '#22c55e', backgroundColor: '#22c55e1a' },
@@ -154,6 +268,8 @@ const styles = StyleSheet.create({
   onlineDotActive: { backgroundColor: '#22c55e' },
   onlineText: { ...typography.labelLg, color: colors.onSurfaceVariant, letterSpacing: 1 },
   onlineTextActive: { color: '#22c55e', fontWeight: '700' },
+  bookingCountBadge: { position: 'absolute', top: 170, alignSelf: 'center', backgroundColor: '#f59e0bee', paddingHorizontal: 16, paddingVertical: 6, borderRadius: radius.full, zIndex: 10 },
+  bookingCountText: { ...typography.labelLg, color: '#000', fontWeight: '700' },
   bottomSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 25, elevation: 16, zIndex: 20, maxHeight: '55%' },
   grabber: { alignItems: 'center', paddingVertical: spacing.md },
   grabberBar: { width: 40, height: 4, backgroundColor: colors.surfaceContainerHighest, borderRadius: 2 },
@@ -166,18 +282,16 @@ const styles = StyleSheet.create({
   profileRating: { ...typography.labelLg, color: colors.primary },
   profileDot: { color: colors.outlineVariant },
   profilePlate: { ...typography.labelLg, color: colors.onSurfaceVariant, textTransform: 'uppercase' },
-  profileChevron: { fontSize: 24, color: colors.outline },
   statsGrid: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
   statCard: { flex: 1, backgroundColor: colors.inverseSurface, borderRadius: radius.xl, padding: spacing.lg },
   statCardHighlight: { backgroundColor: colors.primary },
   statValue: { ...typography.headlineMd, color: colors.surfaceBright, marginBottom: 4 },
   statLabel: { ...typography.labelSm, color: colors.secondaryFixedDim },
-  statTrend: { ...typography.labelSm, color: colors.primaryContainer, marginTop: 4 },
   quickLinks: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
   quickLinkCard: { flex: 1, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.xl, padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.outlineVariant },
   quickLinkIcon: { fontSize: 28, marginBottom: spacing.sm },
   quickLinkLabel: { ...typography.labelLg, color: colors.onSurface },
   statusCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.outlineVariant, flexDirection: 'row', justifyContent: 'space-between' },
   statusLabel: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  statusValue: { ...typography.bodyMd, fontWeight: '600', color: colors.onSurface, textTransform: 'capitalize' },
+  statusValue: { ...typography.bodyMd, fontWeight: '600', textTransform: 'capitalize' },
 });

@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { bookingAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
+import { useModal } from '../components/useModal';
 
 export default function BookingRequestScreen({ route, navigation }) {
   const { booking } = route.params || {};
   const [countdown, setCountdown] = useState(15);
+  const [accepting, setAccepting] = useState(false);
   const timerRef = useRef(null);
+  const { showModal, ModalComponent } = useModal();
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -21,9 +25,16 @@ export default function BookingRequestScreen({ route, navigation }) {
     return () => clearInterval(timerRef.current);
   }, []);
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
     clearInterval(timerRef.current);
-    navigation.replace('ActiveBooking', { booking });
+    setAccepting(true);
+    try {
+      await bookingAPI.acceptBooking(booking.id);
+      navigation.replace('ActiveBooking', { booking });
+    } catch (err) {
+      showModal({ icon: '⚠️', title: 'Error', message: err.response?.data?.error || 'Failed to accept booking' });
+      setAccepting(false);
+    }
   };
 
   const handleDecline = () => {
@@ -31,9 +42,9 @@ export default function BookingRequestScreen({ route, navigation }) {
     navigation.goBack();
   };
 
-  const tripDistance = booking?.distance || '4.2 km';
+  const tripDistance = booking?.distance_km ? `${booking.distance_km} km` : '--';
   const customerName = booking?.customer_name || 'Customer';
-  const customerRating = booking?.customer_rating || '4.9';
+  const customerRating = booking?.customer_rating || '--';
   const customerTrips = booking?.customer_trips || 0;
   const pickup = booking?.pickup_address || 'Pickup location';
   const dropoff = booking?.dropoff_address || 'Dropoff location';
@@ -72,7 +83,7 @@ export default function BookingRequestScreen({ route, navigation }) {
             </View>
           </View>
           <View style={styles.rideTypeBadge}>
-            <Text style={styles.rideTypeText}>Boda Ride</Text>
+            <Text style={styles.rideTypeText}>{booking?.type === 'delivery' ? 'Delivery' : 'Boda Ride'}</Text>
           </View>
         </View>
 
@@ -107,14 +118,15 @@ export default function BookingRequestScreen({ route, navigation }) {
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept} activeOpacity={0.8}>
-            <Text style={styles.acceptBtnText}>Accept Ride</Text>
+          <TouchableOpacity style={[styles.acceptBtn, accepting && { opacity: 0.5 }]} onPress={handleAccept} disabled={accepting} activeOpacity={0.8}>
+            <Text style={styles.acceptBtnText}>{accepting ? 'Accepting...' : 'Accept Ride'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.declineBtn} onPress={handleDecline} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.declineBtn} onPress={handleDecline} disabled={accepting} activeOpacity={0.8}>
             <Text style={styles.declineBtnText}>Decline</Text>
           </TouchableOpacity>
         </View>
       </View>
+      <ModalComponent />
     </View>
   );
 }

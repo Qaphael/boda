@@ -16,6 +16,12 @@ import TrackingScreen from './src/screens/TrackingScreen';
 import RatingScreen from './src/screens/RatingScreen';
 import DeliveryDetailsScreen from './src/screens/DeliveryDetailsScreen';
 import BookingDetailScreen from './src/screens/BookingDetailScreen';
+import PaymentMethodsScreen from './src/screens/PaymentMethodsScreen';
+import SavedPlacesScreen from './src/screens/SavedPlacesScreen';
+import EmergencyContactsScreen from './src/screens/EmergencyContactsScreen';
+import ReferralScreen from './src/screens/ReferralScreen';
+import NotificationSettingsScreen from './src/screens/NotificationSettingsScreen';
+import LanguageScreen from './src/screens/LanguageScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -37,9 +43,14 @@ function TabNavigator() {
           backgroundColor: colors.surface,
           borderTopColor: colors.outlineVariant,
           borderTopWidth: 1,
-          paddingTop: 8,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-          height: Platform.OS === 'ios' ? 88 : 64,
+          paddingTop: 6,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+          height: Platform.OS === 'ios' ? 88 : 76,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
         },
         tabBarActiveTintColor: colors.onPrimaryContainer,
         tabBarInactiveTintColor: colors.onSurfaceVariant,
@@ -97,6 +108,12 @@ function AppNavigator() {
           <Stack.Screen name="Rating" component={RatingScreen} />
           <Stack.Screen name="DeliveryDetails" component={DeliveryDetailsScreen} />
           <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
+          <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
+          <Stack.Screen name="SavedPlaces" component={SavedPlacesScreen} />
+          <Stack.Screen name="EmergencyContacts" component={EmergencyContactsScreen} />
+          <Stack.Screen name="Referral" component={ReferralScreen} />
+          <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+          <Stack.Screen name="Language" component={LanguageScreen} />
         </>
       )}
     </Stack.Navigator>

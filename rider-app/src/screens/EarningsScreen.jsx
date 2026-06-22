@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { riderAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -19,7 +20,11 @@ export default function EarningsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const { showModal, ModalComponent } = useModal();
 
-  useEffect(() => { loadEarnings(); }, [period]);
+  useFocusEffect(
+    useCallback(() => {
+      loadEarnings();
+    }, [period])
+  );
 
   const loadEarnings = async () => {
     try {
@@ -72,19 +77,6 @@ export default function EarningsScreen({ navigation }) {
               </View>
             </View>
 
-            <View style={styles.insightsGrid}>
-              <View style={styles.insightCard}>
-                <Text style={styles.insightIcon}>📈</Text>
-                <Text style={styles.insightLabel}>Bonus</Text>
-                <Text style={styles.insightValue}>UGX 5,000</Text>
-              </View>
-              <View style={styles.insightCard}>
-                <Text style={styles.insightIcon}>📉</Text>
-                <Text style={styles.insightLabel}>Fees</Text>
-                <Text style={[styles.insightValue, { color: colors.error }]}>-UGX 8,700</Text>
-              </View>
-            </View>
-
             <Text style={styles.listTitle}>Recent Trips</Text>
           </>
         }
@@ -109,7 +101,6 @@ export default function EarningsScreen({ navigation }) {
             <TouchableOpacity style={styles.withdrawBtn} onPress={() => showModal({ icon: '💰', title: 'Withdraw', message: 'MoMo withdrawal coming soon.' })} activeOpacity={0.8}>
               <Text style={styles.withdrawBtnText}>💰 Withdraw to MoMo</Text>
             </TouchableOpacity>
-            <Text style={styles.payoutInfo}>Next automatic payout: Monday, 8:00 AM</Text>
             <View style={{ height: 100 }} />
           </>
         }

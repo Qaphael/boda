@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { bookingAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
 
@@ -16,10 +18,13 @@ export default function ActivityScreen({ navigation }) {
   const [bookings, setBookings] = useState([]);
   const [filter, setFilter] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadBookings();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadBookings();
+    }, [])
+  );
 
   const loadBookings = async () => {
     try {
@@ -29,7 +34,13 @@ export default function ActivityScreen({ navigation }) {
       console.error('Failed to load bookings:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadBookings();
   };
 
   const filtered = bookings.filter((b) => {
@@ -77,7 +88,7 @@ export default function ActivityScreen({ navigation }) {
         ))}
       </View>
 
-      <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.list} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}>
         {loading ? (
           <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 40 }} />
         ) : filtered.length === 0 ? (
@@ -138,7 +149,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 60,
+    paddingTop: 56,
   },
   header: {
     paddingHorizontal: spacing.lg,
@@ -277,7 +288,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#22c55e',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: colors.surface,
   },
   redDot: {
     width: 12,
@@ -285,7 +296,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: colors.error,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: colors.surface,
   },
   routeText: {
     ...typography.bodyMd,

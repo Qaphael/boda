@@ -7,14 +7,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { io } from 'socket.io-client';
+import { useModal } from '../components/useModal';
 import { bookingAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
 
 export default function BookingDetailScreen({ route, navigation }) {
+  const { showModal, ModalComponent } = useModal();
   const { bookingId } = route.params;
   const [booking, setBooking] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState(null);
   const [riderLocation, setRiderLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -39,6 +42,15 @@ export default function BookingDetailScreen({ route, navigation }) {
     try {
       const { data } = await bookingAPI.getBooking(bookingId);
       setBooking(data.booking);
+      if (data.booking?.payment) {
+        setPaymentStatus(data.booking.payment);
+      } else {
+        try {
+          const { data: payData } = await bookingAPI.getPaymentStatus(bookingId);
+          const latest = payData.payments?.[0];
+          if (latest) setPaymentStatus(latest);
+        } catch {}
+      }
     } catch (err) {
       console.error('Failed to load booking:', err);
     } finally {
@@ -46,34 +58,48 @@ export default function BookingDetailScreen({ route, navigation }) {
     }
   };
 
-  const handleCancel = async () => {
-    setActionLoading(true);
-    try {
-      await bookingAPI.cancelBooking(bookingId);
-      loadBooking();
-    } catch (err) {
-      console.error('Cancel error:', err);
-    } finally {
-      setActionLoading(false);
-    }
+  const handleCancel = () => {
+    showModal({
+      icon: '⚠️',
+      title: 'Cancel Booking?',
+      message: 'Are you sure you want to cancel this booking?',
+      actions: [
+        { label: 'No' },
+        { label: 'Yes, cancel', primary: true, onPress: async () => {
+          setActionLoading(true);
+          try {
+            await bookingAPI.cancelBooking(bookingId);
+            loadBooking();
+            showModal({ icon: '✅', title: 'Cancelled', message: 'Your booking has been cancelled.' });
+          } catch (err) {
+            const msg = err.response?.data?.error || 'Failed to cancel booking.';
+            showModal({ icon: '⚠️', title: 'Error', message: msg });
+          } finally {
+            setActionLoading(false);
+          }
+        }},
+      ],
+    });
   };
 
   const handleRate = async (score) => {
     setActionLoading(true);
     try {
       await bookingAPI.rateBooking(bookingId, score, '');
+      showModal({ icon: '✅', title: 'Thanks!', message: 'Your rating has been submitted.' });
       loadBooking();
     } catch (err) {
-      console.error('Rating error:', err);
+      const msg = err.response?.data?.error || 'Failed to submit rating.';
+      showModal({ icon: '⚠️', title: 'Rating', message: msg });
     } finally {
       setActionLoading(false);
     }
   };
 
   const statusColors = {
-    pending: '#F59E0B',
-    accepted: '#3B82F6',
-    in_progress: '#10B981',
+    pending: '#f59e0b',
+    accepted: colors.primary,
+    in_progress: '#22c55e',
     completed: colors.primary,
     cancelled: colors.error,
   };
@@ -125,6 +151,18 @@ export default function BookingDetailScreen({ route, navigation }) {
             UGX {(booking.fare_final || booking.fare_estimate || 0).toLocaleString()}
           </Text>
         </View>
+        {paymentStatus && (
+          <View style={[styles.row, { borderBottomWidth: 0 }]}>
+            <Text style={styles.label}>Payment</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: paymentStatus.status === 'released' || paymentStatus.status === 'held' ? '#22c55e' : paymentStatus.status === 'failed' ? '#ef4444' : '#f59e0b' }} />
+              <Text style={[styles.value, { fontSize: 13 }]}>
+                {paymentStatus.status === 'released' ? 'Paid' : paymentStatus.status === 'held' ? 'In Escrow' : paymentStatus.status === 'failed' ? 'Failed' : 'Processing'}
+                {paymentStatus.method ? ` (${paymentStatus.method.toUpperCase()})` : ''}
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {booking.rider_name && (
@@ -141,17 +179,28 @@ export default function BookingDetailScreen({ route, navigation }) {
         </View>
       )}
 
-      {booking.status === 'pending' && (
-        <TouchableOpacity
-          style={[styles.cancelButton, actionLoading && { opacity: 0.5 }]}
-          onPress={handleCancel}
-          disabled={actionLoading}
-        >
-          <Text style={styles.cancelButtonText}>Cancel Booking</Text>
-        </TouchableOpacity>
+      {(booking.status === 'pending' || booking.status === 'accepted') && (
+        <>
+          <TouchableOpacity
+            style={[styles.continueButton, actionLoading && { opacity: 0.5 }]}
+            onPress={() => navigation.navigate('Tracking', { bookingId })}
+            disabled={actionLoading}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.continueButtonText}>Continue Trip</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cancelButton, actionLoading && { opacity: 0.5 }]}
+            onPress={handleCancel}
+            disabled={actionLoading}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cancelButtonText}>Cancel Booking</Text>
+          </TouchableOpacity>
+        </>
       )}
 
-      {booking.status === 'completed' && (
+      {booking.status === 'completed' && !booking.my_rating && (
         <View style={styles.ratingSection}>
           <Text style={styles.ratingTitle}>Rate your experience</Text>
           <View style={styles.ratingButtons}>
@@ -168,6 +217,21 @@ export default function BookingDetailScreen({ route, navigation }) {
           </View>
         </View>
       )}
+
+      {booking.status === 'completed' && booking.my_rating && (
+        <View style={styles.ratingSection}>
+          <Text style={styles.ratingTitle}>Your rating</Text>
+          <Text style={{ ...typography.headlineMd, color: colors.primary, textAlign: 'center' }}>
+            {'★'.repeat(booking.my_rating)}{'☆'.repeat(5 - booking.my_rating)}
+          </Text>
+          {booking.my_rating_comment ? (
+            <Text style={{ ...typography.bodyMd, color: colors.onSurfaceVariant, textAlign: 'center', marginTop: spacing.sm }}>
+              "{booking.my_rating_comment}"
+            </Text>
+          ) : null}
+        </View>
+      )}
+      <ModalComponent />
     </View>
   );
 }
@@ -177,7 +241,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     padding: spacing.lg,
-    paddingTop: 80,
+    paddingTop: 56,
   },
   backButton: {
     width: 48,
@@ -247,6 +311,24 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     maxWidth: '60%',
     textAlign: 'right',
+  },
+  continueButton: {
+    backgroundColor: colors.primaryContainer,
+    borderRadius: radius.xl,
+    height: spacing.touchMin,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  continueButtonText: {
+    ...typography.titleMd,
+    color: colors.onPrimaryContainer,
+    fontWeight: '700',
   },
   cancelButton: {
     backgroundColor: colors.errorContainer,

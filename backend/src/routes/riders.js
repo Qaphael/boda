@@ -358,6 +358,216 @@ const updateRiderDocuments = async (req, reply) => {
   }
 };
 
+const getRiderVehicle = async (req, reply) => {
+  try {
+    const riderId = req.user.riderId;
+    if (!riderId) return reply.status(403).send({ error: 'Only riders can view vehicle info' });
+
+    const result = await pool.query(
+      `SELECT id, name, phone, plate_number, national_id, status, selfie_photo, id_photo,
+              avg_rating, total_trips, total_ratings, total_cancellations, created_at
+       FROM riders WHERE id = $1 AND is_deleted = false`,
+      [riderId]
+    );
+
+    if (result.rows.length === 0) return reply.status(404).send({ error: 'Rider not found' });
+
+    return reply.send({ vehicle: result.rows[0] });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to get vehicle info' });
+  }
+};
+
+const updateRiderVehicle = async (req, reply) => {
+  try {
+    const riderId = req.user.riderId;
+    if (!riderId) return reply.status(403).send({ error: 'Only riders can update vehicle info' });
+
+    const { plate_number, id_photo, selfie_photo } = req.body;
+
+    const result = await pool.query(
+      `UPDATE riders SET
+        plate_number = COALESCE($1, plate_number),
+        id_photo = COALESCE($2, id_photo),
+        selfie_photo = COALESCE($3, selfie_photo),
+        updated_at = NOW()
+       WHERE id = $4 AND is_deleted = false
+       RETURNING id, plate_number, id_photo, selfie_photo`,
+      [plate_number, id_photo, selfie_photo, riderId]
+    );
+
+    if (result.rows.length === 0) return reply.status(404).send({ error: 'Rider not found' });
+
+    return reply.send({ success: true, vehicle: result.rows[0] });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to update vehicle info' });
+  }
+};
+
+const getRiderTickets = async (req, reply) => {
+  try {
+    const riderId = req.user.riderId;
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      `SELECT t.id, t.subject, t.status, t.priority, t.category, t.created_at, t.updated_at
+       FROM support_tickets t
+       WHERE t.rider_id = $1 OR t.user_id = $2
+       ORDER BY t.created_at DESC LIMIT 20`,
+      [riderId, userId]
+    );
+
+    return reply.send({ tickets: result.rows });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to get tickets' });
+  }
+};
+
+const createRiderTicket = async (req, reply) => {
+  try {
+    const riderId = req.user.riderId;
+    const userId = req.user.userId;
+    const { subject, description, category = 'general', priority = 'medium', booking_id } = req.body;
+
+    if (!subject || !description) {
+      return reply.status(400).send({ error: 'Subject and description are required' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO support_tickets (subject, description, priority, category, user_id, rider_id, booking_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [subject, description, priority, category, userId, riderId, booking_id || null]
+    );
+
+    return reply.status(201).send({ ticket: result.rows[0] });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to create ticket' });
+  }
+};
+
+const getRiderTicketDetails = async (req, reply) => {
+  try {
+    const { id } = req.params;
+    const riderId = req.user.riderId;
+    const userId = req.user.userId;
+
+    const ticket = await pool.query(
+      `SELECT t.* FROM support_tickets t
+       WHERE t.id = $1 AND (t.rider_id = $2 OR t.user_id = $3)`,
+      [id, riderId, userId]
+    );
+
+    if (ticket.rows.length === 0) return reply.status(404).send({ error: 'Ticket not found' });
+
+    const messages = await pool.query(
+      `SELECT tm.*, CASE WHEN tm.admin_id IS NOT NULL THEN 'Support' ELSE 'You' END as sender
+       FROM ticket_messages tm
+       WHERE tm.ticket_id = $1
+       ORDER BY tm.created_at ASC`, [id]
+    );
+
+    return reply.send({ ticket: ticket.rows[0], messages: messages.rows });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to get ticket details' });
+  }
+};
+
+const replyToTicket = async (req, reply) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const { message } = req.body;
+
+    if (!message) return reply.status(400).send({ error: 'Message is required' });
+
+    const ticket = await pool.query(
+      'SELECT id FROM support_tickets WHERE id = $1 AND (rider_id = $2 OR user_id = $3)',
+      [id, req.user.riderId, userId]
+    );
+
+    if (ticket.rows.length === 0) return reply.status(404).send({ error: 'Ticket not found' });
+
+    await pool.query(
+      `INSERT INTO ticket_messages (ticket_id, message, type) VALUES ($1, $2, 'user_message')`,
+      [id, message]
+    );
+
+    await pool.query('UPDATE support_tickets SET updated_at = NOW() WHERE id = $1', [id]);
+
+    return reply.status(201).send({ success: true });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to reply' });
+  }
+};
+
+const getRiderIncentives = async (req, reply) => {
+  try {
+    const riderId = req.user.riderId;
+    if (!riderId) return reply.status(403).send({ error: 'Only riders can view incentives' });
+
+    const stats = await pool.query(
+      `SELECT COUNT(*) as total_trips,
+              COALESCE(SUM(fare_final), 0) as total_earnings,
+              COALESCE(AVG(fare_final), 0) as avg_fare
+       FROM bookings WHERE rider_id = $1 AND status = 'completed'`,
+      [riderId]
+    );
+
+    const dailyTrips = await pool.query(
+      `SELECT COUNT(*) as count FROM bookings
+       WHERE rider_id = $1 AND status = 'completed'
+       AND completed_at >= CURRENT_DATE`,
+      [riderId]
+    );
+
+    const weeklyTrips = await pool.query(
+      `SELECT COUNT(*) as count FROM bookings
+       WHERE rider_id = $1 AND status = 'completed'
+       AND completed_at >= CURRENT_DATE - INTERVAL '7 days'`,
+      [riderId]
+    );
+
+    const rating = await pool.query(
+      'SELECT avg_rating, total_ratings FROM riders WHERE id = $1',
+      [riderId]
+    );
+
+    const totalTrips = parseInt(stats.rows[0].total_trips);
+    const totalEarnings = parseInt(stats.rows[0].total_earnings);
+    const avgFare = Math.round(parseFloat(stats.rows[0].avg_fare));
+    const dayTrips = parseInt(dailyTrips.rows[0].count);
+    const weekTrips = parseInt(weeklyTrips.rows[0].count);
+    const avgRating = parseFloat(rating.rows[0]?.avg_rating || 0);
+
+    let tier = 'Bronze';
+    let nextTier = 'Silver';
+    let nextTierTrips = 50;
+    if (totalTrips >= 200) { tier = 'Gold'; nextTier = 'Platinum'; nextTierTrips = 500; }
+    else if (totalTrips >= 50) { tier = 'Silver'; nextTier = 'Gold'; nextTierTrips = 200; }
+
+    const quests = [
+      { id: 'daily5', title: 'Daily Hustle', description: 'Complete 5 trips today', target: 5, current: dayTrips, icon: '🔥', reward: 'UGX 2,000' },
+      { id: 'highRating', title: 'Five Star Rider', description: 'Maintain 4.8+ rating for 7 days', target: 7, current: avgRating >= 4.8 ? 7 : 0, icon: '⭐', reward: 'Priority bookings' },
+      { id: 'weekendWarrior', title: 'Weekend Warrior', description: 'Complete 20 trips this week', target: 20, current: weekTrips, icon: '💪', reward: 'UGX 15,000' },
+    ];
+
+    return reply.send({
+      tier, nextTier, nextTierTrips,
+      stats: { totalTrips, totalEarnings, avgFare, avgRating: avgRating.toFixed(2) },
+      quests,
+    });
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: 'Failed to get incentives' });
+  }
+};
+
 module.exports = {
   registerRider,
   getNearbyRiders,
@@ -366,4 +576,11 @@ module.exports = {
   getRiderProfile,
   getRiderEarnings,
   updateRiderDocuments,
+  getRiderVehicle,
+  updateRiderVehicle,
+  getRiderTickets,
+  createRiderTicket,
+  getRiderTicketDetails,
+  replyToTicket,
+  getRiderIncentives,
 };

@@ -21,6 +21,10 @@ export default function RatingScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  const handleSkip = () => {
+    navigation.navigate('Main');
+  };
+
   const toggleTag = (tag) => {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
@@ -34,7 +38,7 @@ export default function RatingScreen({ route, navigation }) {
       const fullComment = [comment, ...selectedTags].filter(Boolean).join(', ');
       await bookingAPI.rateBooking(bookingId, rating, fullComment);
       setSubmitted(true);
-      setTimeout(() => navigation.navigate('Main'), 1500);
+      setTimeout(() => navigation.navigate('Main'), 2000);
     } catch (err) {
       console.error('Rating error:', err);
     } finally {
@@ -49,13 +53,21 @@ export default function RatingScreen({ route, navigation }) {
           <Text style={styles.successCheckmark}>✓</Text>
         </View>
         <Text style={styles.successTitle}>Thanks for your feedback!</Text>
-        <Text style={styles.successSubtitle}>Your rating helps keep GuluRide safe.</Text>
+        <Text style={styles.successSubtitle}>Your rating helps keep Boda safe.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleSkip} activeOpacity={0.7}>
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.headline}>Rate your trip</Text>
 
@@ -66,7 +78,7 @@ export default function RatingScreen({ route, navigation }) {
             </Text>
           </View>
           <Text style={styles.riderName}>{booking?.rider_name || 'Your Rider'}</Text>
-          <Text style={styles.riderMeta}>🏍 Bajaj Boxer • KY 123Z</Text>
+          <Text style={styles.riderMeta}>{booking?.rider_plate || 'Boda'} • UGX {(booking?.fare_final || booking?.fare_estimate || 0).toLocaleString()}</Text>
         </View>
 
         <Text style={styles.sectionLabel}>How was your ride?</Text>
@@ -133,8 +145,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 60,
   },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: 56,
+    paddingBottom: spacing.md,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceContainerHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backIcon: { fontSize: 18, color: colors.onSurface },
+  skipText: { ...typography.labelLg, color: colors.onSurfaceVariant },
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingBottom: 40,

@@ -1,93 +1,121 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { riderAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
 
 const CHECKLIST = [
-  { id: 'brakes', label: 'Brake Pressure', desc: 'Check front and rear levers' },
-  { id: 'tires', label: 'Tire Condition', desc: 'Check for punctures and tread' },
-  { id: 'lights', label: 'Lights & Indicators', desc: 'Headlight and signal check' },
-  { id: 'helmet', label: 'Helmet Check', desc: 'Straps secure for rider & passenger' },
+  { id: 'brakes', label: 'Brakes working', icon: '🔴' },
+  { id: 'lights', label: 'Headlights & indicators', icon: '💡' },
+  { id: 'tires', label: 'Tires properly inflated', icon: '🛞' },
+  { id: 'mirror', label: 'Mirrors intact', icon: '🪞' },
+  { id: 'helmet', label: 'Helmet available', icon: '⛑️' },
+  { id: 'license', label: 'License visible', icon: '📋' },
 ];
 
-export default function VehicleSafetyScreen() {
+export default function VehicleSafetyScreen({ navigation }) {
+  const { rider } = useAuth();
+  const [vehicle, setVehicle] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [checked, setChecked] = useState({});
   const { showModal, ModalComponent } = useModal();
 
-  const toggleCheck = (id) => {
-    setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  useEffect(() => {
+    loadVehicle();
+  }, []);
+
+  const loadVehicle = async () => {
+    try {
+      if (rider?.riderId) {
+        const { data } = await riderAPI.getVehicle(rider.riderId);
+        setVehicle(data.vehicle);
+      } else if (rider) {
+        setVehicle({
+          name: rider.name, plate_number: rider.plate_number || 'N/A',
+          status: rider.status, avg_rating: rider.avg_rating,
+          total_trips: 0, total_cancellations: 0,
+        });
+      }
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
-  const allChecked = CHECKLIST.every((item) => checked[item.id]);
+  const toggleCheck = (id) => {
+    setChecked(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const allChecked = CHECKLIST.every(c => checked[c.id]);
+  const completedCount = CHECKLIST.filter(c => checked[c.id]).length;
+
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
     <View style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.topTitle}>Vehicle & Safety</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.vehicleHero}>
-          <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>Active Vehicle</Text></View>
-          <Text style={styles.vehicleName}>Bajaj Boxer</Text>
-          <Text style={styles.vehiclePlate}>UER 452T</Text>
-          <Text style={styles.vehicleStatus}>Status: Ready</Text>
-          <Text style={styles.vehicleIcon}>🏍</Text>
+        <View style={styles.vehicleCard}>
+          <View style={styles.vehicleHeader}>
+            <Text style={styles.vehicleIcon}>🏍</Text>
+            <View style={styles.vehicleInfo}>
+              <Text style={styles.vehicleName}>{vehicle?.name || 'Rider'}</Text>
+              <Text style={styles.vehiclePlate}>{vehicle?.plate_number || 'N/A'}</Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: vehicle?.status === 'verified' ? '#22c55e1a' : '#f59e0b1a' }]}>
+              <Text style={[styles.statusText, { color: vehicle?.status === 'verified' ? '#22c55e' : '#f59e0b' }]}>{vehicle?.status || 'N/A'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.vehicleStats}>
+            <View style={styles.vehicleStat}>
+              <Text style={styles.vehicleStatValue}>⭐ {vehicle?.avg_rating || '--'}</Text>
+              <Text style={styles.vehicleStatLabel}>Rating</Text>
+            </View>
+            <View style={styles.vehicleStatDivider} />
+            <View style={styles.vehicleStat}>
+              <Text style={styles.vehicleStatValue}>{vehicle?.total_trips || 0}</Text>
+              <Text style={styles.vehicleStatLabel}>Trips</Text>
+            </View>
+            <View style={styles.vehicleStatDivider} />
+            <View style={styles.vehicleStat}>
+              <Text style={styles.vehicleStatValue}>{vehicle?.total_cancellations || 0}</Text>
+              <Text style={styles.vehicleStatLabel}>Cancellations</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.docGrid}>
-          <TouchableOpacity style={styles.docCard} onPress={() => showModal({ icon: '🛡', title: 'Insurance', message: 'Insurance is active, expires in 45 days.' })} activeOpacity={0.7}>
-            <View style={styles.docHeader}>
-              <Text style={styles.docIcon}>🛡</Text>
-              <View style={styles.docStatusDot} />
-            </View>
-            <Text style={styles.docLabel}>Insurance</Text>
-            <Text style={styles.docSubtext}>Expires in 45 days</Text>
-            <Text style={styles.docStatus}>Active</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.docCard} onPress={() => showModal({ icon: '📋', title: 'Permit', message: 'Permit is valid, Class A verified.' })} activeOpacity={0.7}>
-            <View style={styles.docHeader}>
-              <Text style={styles.docIcon}>📋</Text>
-              <View style={[styles.docStatusDot, { backgroundColor: '#22c55e' }]} />
-            </View>
-            <Text style={styles.docLabel}>Permit</Text>
-            <Text style={styles.docSubtext}>Valid Class A</Text>
-            <Text style={styles.docStatus}>Verified</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.sectionTitle}>Daily Safety Checklist</Text>
-        <View style={styles.checklistCard}>
-          {CHECKLIST.map((item, idx) => (
-            <TouchableOpacity key={item.id} style={[styles.checkItem, idx < CHECKLIST.length - 1 && styles.checkItemBorder]} onPress={() => toggleCheck(item.id)} activeOpacity={0.7}>
-              <View style={[styles.checkbox, checked[item.id] && styles.checkboxChecked]}>
-                {checked[item.id] && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <View style={styles.checkInfo}>
-                <Text style={styles.checkLabel}>{item.label}</Text>
-                <Text style={styles.checkDesc}>{item.desc}</Text>
-              </View>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Daily Safety Check</Text>
+            <Text style={styles.sectionProgress}>{completedCount}/{CHECKLIST.length}</Text>
+          </View>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${(completedCount / CHECKLIST.length) * 100}%` }]} />
+          </View>
+          {CHECKLIST.map((item) => (
+            <TouchableOpacity key={item.id} style={styles.checkItem} onPress={() => toggleCheck(item.id)} activeOpacity={0.7}>
+              <Text style={styles.checkIcon}>{item.icon}</Text>
+              <Text style={styles.checkLabel}>{item.label}</Text>
+              <Switch value={!!checked[item.id]} onValueChange={() => toggleCheck(item.id)}
+                trackColor={{ false: colors.surfaceContainerHigh, true: colors.primaryContainer }}
+                thumbColor={checked[item.id] ? colors.primary : colors.surfaceContainerHighest} />
             </TouchableOpacity>
           ))}
         </View>
 
-        <TouchableOpacity
-          style={[styles.submitBtn, !allChecked && styles.submitBtnDisabled]}
-          onPress={() => showModal({ icon: '✅', title: 'Checklist Submitted', message: 'Safety checklist completed for today.' })}
-          disabled={!allChecked}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.submitBtnText}>Submit Checklist</Text>
-        </TouchableOpacity>
-
-        <View style={styles.actionsList}>
-          <TouchableOpacity style={styles.actionItem} onPress={() => showModal({ icon: '🔧', title: 'Maintenance', message: 'Maintenance logs coming soon.' })} activeOpacity={0.7}>
-            <Text style={styles.actionIcon}>🔧</Text>
-            <Text style={styles.actionLabel}>Maintenance Logs</Text>
-            <Text style={styles.actionChevron}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionItem} onPress={() => showModal({ icon: '🚨', title: 'Incident', message: 'Incident reporting coming soon.' })} activeOpacity={0.7}>
-            <Text style={styles.actionIcon}>🚨</Text>
-            <Text style={styles.actionLabel}>Report Incident</Text>
-            <Text style={styles.actionChevron}>›</Text>
-          </TouchableOpacity>
-        </View>
+        {allChecked && (
+          <View style={styles.readyCard}>
+            <Text style={styles.readyIcon}>✅</Text>
+            <Text style={styles.readyText}>Safety check complete! You're ready to ride.</Text>
+          </View>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -97,38 +125,35 @@ export default function VehicleSafetyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 60 },
-  vehicleHero: { marginHorizontal: spacing.lg, backgroundColor: colors.inverseSurface, borderRadius: 24, padding: spacing.xl, marginBottom: spacing.xl, position: 'relative', overflow: 'hidden' },
-  activeBadge: { backgroundColor: '#22c55e33', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: radius.full, marginBottom: spacing.md },
-  activeBadgeText: { ...typography.labelSm, color: '#22c55e', fontWeight: '700' },
-  vehicleName: { ...typography.headlineMd, color: colors.surfaceBright },
-  vehiclePlate: { ...typography.titleMd, color: colors.primaryContainer, marginTop: 4 },
-  vehicleStatus: { ...typography.labelLg, color: colors.secondaryFixedDim, marginTop: 4 },
-  vehicleIcon: { position: 'absolute', right: 16, bottom: 16, fontSize: 48, opacity: 0.3 },
-  docGrid: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
-  docCard: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.outlineVariant },
-  docHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  docIcon: { fontSize: 24 },
-  docStatusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
-  docLabel: { ...typography.titleMd, color: colors.onSurface },
-  docSubtext: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
-  docStatus: { ...typography.labelSm, color: '#22c55e', fontWeight: '600', marginTop: 4 },
-  sectionTitle: { ...typography.titleMd, color: colors.onSurface, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  checklistCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.outlineVariant, overflow: 'hidden', marginBottom: spacing.lg },
-  checkItem: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md },
-  checkItemBorder: { borderBottomWidth: 1, borderBottomColor: colors.outlineVariant },
-  checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 2, borderColor: colors.outlineVariant, alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: colors.primaryContainer, borderColor: colors.primary },
-  checkmark: { fontSize: 14, color: colors.onPrimaryContainer, fontWeight: '700' },
-  checkInfo: { flex: 1 },
-  checkLabel: { ...typography.titleMd, color: colors.onSurface },
-  checkDesc: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
-  submitBtn: { marginHorizontal: spacing.lg, backgroundColor: colors.primaryContainer, height: spacing.touchMin, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xl },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitBtnText: { ...typography.titleMd, color: colors.onPrimaryContainer },
-  actionsList: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.outlineVariant, overflow: 'hidden' },
-  actionItem: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant },
-  actionIcon: { fontSize: 20 },
-  actionLabel: { ...typography.titleMd, color: colors.onSurface, flex: 1 },
-  actionChevron: { fontSize: 24, color: colors.outline },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerHigh, alignItems: 'center', justifyContent: 'center' },
+  backIcon: { fontSize: 18, color: colors.onSurface },
+  topTitle: { ...typography.titleLg, color: colors.onSurface, fontWeight: '700' },
+  vehicleCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLow, borderRadius: 24, padding: spacing.xl, borderWidth: 1, borderColor: colors.outlineVariant, marginBottom: spacing.xl },
+  vehicleHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
+  vehicleIcon: { fontSize: 40, marginRight: spacing.md },
+  vehicleInfo: { flex: 1 },
+  vehicleName: { ...typography.titleLg, color: colors.onSurface },
+  vehiclePlate: { ...typography.bodyMd, color: colors.onSurfaceVariant, textTransform: 'uppercase', marginTop: 2 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full },
+  statusText: { ...typography.labelSm, fontWeight: '700', textTransform: 'capitalize' },
+  vehicleStats: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md },
+  vehicleStat: { flex: 1, alignItems: 'center' },
+  vehicleStatValue: { ...typography.titleMd, color: colors.onSurface, fontWeight: '700' },
+  vehicleStatLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  vehicleStatDivider: { width: 1, height: 30, backgroundColor: colors.outlineVariant },
+  section: { marginHorizontal: spacing.lg, marginBottom: spacing.xl },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  sectionTitle: { ...typography.titleMd, color: colors.onSurface },
+  sectionProgress: { ...typography.labelLg, color: colors.primary, fontWeight: '700' },
+  progressBar: { height: 4, backgroundColor: colors.surfaceContainerHigh, borderRadius: 2, marginBottom: spacing.lg },
+  progressFill: { height: 4, backgroundColor: colors.primary, borderRadius: 2 },
+  checkItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceContainerLow, borderRadius: radius.xl, padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.outlineVariant },
+  checkIcon: { fontSize: 20, marginRight: spacing.md },
+  checkLabel: { flex: 1, ...typography.titleMd, color: colors.onSurface },
+  readyCard: { marginHorizontal: spacing.lg, backgroundColor: '#22c55e1a', borderRadius: radius.xl, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  readyIcon: { fontSize: 24 },
+  readyText: { ...typography.bodyMd, color: '#22c55e', fontWeight: '600', flex: 1 },
 });

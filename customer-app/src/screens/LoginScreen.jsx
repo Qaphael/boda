@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,25 @@ import {
   Platform,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../components/useModal';
 import { colors, typography, spacing, radius } from '../theme';
 
 export default function LoginScreen() {
+  const { showModal, ModalComponent } = useModal();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '']);
   const [step, setStep] = useState('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
   const { sendOTP, verifyOTP } = useAuth();
   const otpRefs = [useRef(), useRef(), useRef(), useRef()];
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const handleSendOTP = async () => {
     if (!phone || phone.length < 9) {
@@ -31,6 +40,7 @@ export default function LoginScreen() {
     try {
       await sendOTP(`256${phone}`);
       setStep('otp');
+      setCooldown(60);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to send OTP');
     } finally {
@@ -76,10 +86,12 @@ export default function LoginScreen() {
   };
 
   const handleResend = async () => {
+    if (cooldown > 0) return;
     setError('');
     setLoading(true);
     try {
       await sendOTP(`256${phone}`);
+      setCooldown(60);
     } catch (err) {
       setError('Failed to resend OTP');
     } finally {
@@ -94,7 +106,7 @@ export default function LoginScreen() {
     >
       <View style={styles.content}>
         <View style={styles.brandBadge}>
-          <Text style={styles.brandText}>GuluRide</Text>
+          <Text style={styles.brandText}>Boda</Text>
         </View>
 
         <View style={styles.header}>
@@ -143,8 +155,10 @@ export default function LoginScreen() {
                   />
                 ))}
               </View>
-              <TouchableOpacity onPress={handleResend} disabled={loading}>
-                <Text style={styles.resendText}>Resend Code</Text>
+              <TouchableOpacity onPress={handleResend} disabled={loading || cooldown > 0}>
+                <Text style={[styles.resendText, cooldown > 0 && { color: colors.onSurfaceVariant }]}>
+                  {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -169,10 +183,11 @@ export default function LoginScreen() {
 
         <Text style={styles.footer}>
           By continuing, you agree to our{' '}
-          <Text style={styles.footerLink}>Terms</Text> and{' '}
-          <Text style={styles.footerLink}>Privacy Policy</Text>.
+          <Text style={styles.footerLink} onPress={() => showModal({ icon: '📋', title: 'Terms of Service', message: 'By using Boda you agree to our terms.\n\nRides are between you and the rider.\nBoda facilitates payment via escrow.\n\nRatings help keep our community safe.' })}>Terms</Text> and{' '}
+          <Text style={styles.footerLink} onPress={() => showModal({ icon: '🔒', title: 'Privacy Policy', message: 'Boda collects location data during active rides only.\n\nYour phone number is never shared with riders.\n\nPayment data is processed securely via MTN/Airtel MoMo.' })}>Privacy Policy</Text>.
         </Text>
       </View>
+      <ModalComponent />
     </KeyboardAvoidingView>
   );
 }
@@ -185,7 +200,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: 80,
+    paddingTop: 56,
     paddingBottom: spacing.xxl,
     justifyContent: 'space-between',
   },

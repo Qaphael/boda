@@ -14,6 +14,7 @@ const adminRoutes = require('./routes/admin');
 const supportRoutes = require('./routes/support');
 const settingsRoutes = require('./routes/settings');
 const notificationRoutes = require('./routes/notifications');
+const profileRoutes = require('./routes/profile');
 const { authenticateToken, requireRole } = require('./middleware/auth');
 const jwt = require('jsonwebtoken');
 
@@ -98,17 +99,26 @@ const start = async () => {
     fastify.get('/riders/:id/profile', riderRoutes.getRiderProfile);
     fastify.get('/riders/:riderId/earnings', { preHandler: authenticateToken }, riderRoutes.getRiderEarnings);
     fastify.patch('/riders/:riderId/documents', { preHandler: authenticateToken }, riderRoutes.updateRiderDocuments);
+    fastify.get('/riders/:riderId/vehicle', { preHandler: authenticateToken }, riderRoutes.getRiderVehicle);
+    fastify.patch('/riders/:riderId/vehicle', { preHandler: authenticateToken }, riderRoutes.updateRiderVehicle);
+    fastify.get('/riders/:riderId/incentives', { preHandler: authenticateToken }, riderRoutes.getRiderIncentives);
+    fastify.get('/riders/support/tickets', { preHandler: authenticateToken }, riderRoutes.getRiderTickets);
+    fastify.post('/riders/support/tickets', { preHandler: authenticateToken }, riderRoutes.createRiderTicket);
+    fastify.get('/riders/support/tickets/:id', { preHandler: authenticateToken }, riderRoutes.getRiderTicketDetails);
+    fastify.post('/riders/support/tickets/:id/reply', { preHandler: authenticateToken }, riderRoutes.replyToTicket);
 
     fastify.post('/bookings', { preHandler: authenticateToken }, bookingRoutes.createBooking);
     fastify.get('/bookings/:id', { preHandler: authenticateToken }, bookingRoutes.getBooking);
     fastify.get('/bookings/my/customer', { preHandler: authenticateToken }, bookingRoutes.getCustomerBookings);
     fastify.get('/bookings/my/rider', { preHandler: authenticateToken }, bookingRoutes.getRiderBookings);
     fastify.patch('/bookings/:id/accept', { preHandler: authenticateToken }, bookingRoutes.acceptBooking);
+    fastify.post('/bookings/:id/request-rider', { preHandler: authenticateToken }, bookingRoutes.requestRider);
     fastify.patch('/bookings/:id/start', { preHandler: authenticateToken }, bookingRoutes.startBooking);
     fastify.patch('/bookings/:id/complete', { preHandler: authenticateToken }, bookingRoutes.completeBooking);
     fastify.patch('/bookings/:id/cancel', { preHandler: authenticateToken }, bookingRoutes.cancelBooking);
     fastify.post('/bookings/:id/rate', { preHandler: authenticateToken }, bookingRoutes.rateBooking);
     fastify.post('/deliveries/:id/confirm', { preHandler: authenticateToken }, bookingRoutes.confirmDelivery);
+    fastify.get('/bookings/:id/payment-status', { preHandler: authenticateToken }, bookingRoutes.getPaymentStatus);
 
     fastify.get('/admin/dashboard', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.getDashboardStats);
     fastify.get('/admin/riders/pending', { preHandler: [authenticateToken, requireRole(['admin'])] }, adminRoutes.getPendingRiders);
@@ -133,6 +143,27 @@ const start = async () => {
     fastify.put('/admin/settings', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.updateSettings);
     fastify.get('/admin/profile', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.getProfile);
     fastify.put('/admin/profile', { preHandler: [authenticateToken, requireRole(['admin'])] }, settingsRoutes.updateProfile);
+
+    fastify.get('/profile/customer', { preHandler: authenticateToken }, profileRoutes.getCustomerProfile);
+    fastify.put('/profile/customer', { preHandler: authenticateToken }, profileRoutes.updateCustomerProfile);
+    fastify.get('/profile/saved-places', { preHandler: authenticateToken }, profileRoutes.getSavedPlaces);
+    fastify.post('/profile/saved-places', { preHandler: authenticateToken }, profileRoutes.addSavedPlace);
+    fastify.put('/profile/saved-places/:id', { preHandler: authenticateToken }, profileRoutes.updateSavedPlace);
+    fastify.delete('/profile/saved-places/:id', { preHandler: authenticateToken }, profileRoutes.deleteSavedPlace);
+    fastify.get('/profile/payment-methods', { preHandler: authenticateToken }, profileRoutes.getPaymentMethods);
+    fastify.post('/profile/payment-methods', { preHandler: authenticateToken }, profileRoutes.addPaymentMethod);
+    fastify.patch('/profile/payment-methods/:id/default', { preHandler: authenticateToken }, profileRoutes.setDefaultPayment);
+    fastify.delete('/profile/payment-methods/:id', { preHandler: authenticateToken }, profileRoutes.deletePaymentMethod);
+    fastify.get('/profile/referral', { preHandler: authenticateToken }, profileRoutes.getReferral);
+    fastify.post('/profile/referral/apply', { preHandler: authenticateToken }, profileRoutes.applyReferral);
+    fastify.get('/profile/emergency-contacts', { preHandler: authenticateToken }, profileRoutes.getEmergencyContacts);
+    fastify.post('/profile/emergency-contacts', { preHandler: authenticateToken }, profileRoutes.addEmergencyContact);
+    fastify.delete('/profile/emergency-contacts/:id', { preHandler: authenticateToken }, profileRoutes.deleteEmergencyContact);
+    fastify.get('/profile/settings', { preHandler: authenticateToken }, profileRoutes.getSettings);
+    fastify.put('/profile/settings', { preHandler: authenticateToken }, profileRoutes.updateSettings);
+    fastify.get('/profile/notifications', { preHandler: authenticateToken }, profileRoutes.getNotifications);
+    fastify.patch('/profile/notifications/:id/read', { preHandler: authenticateToken }, profileRoutes.markNotificationRead);
+    fastify.patch('/profile/notifications/read-all', { preHandler: authenticateToken }, profileRoutes.markAllRead);
 
     fastify.get('/admin/notifications', { preHandler: [authenticateToken, requireRole(['admin'])] }, notificationRoutes.getNotifications);
     fastify.patch('/admin/notifications/:id/read', { preHandler: [authenticateToken, requireRole(['admin'])] }, notificationRoutes.markAsRead);

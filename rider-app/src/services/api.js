@@ -8,6 +8,11 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let onAuthError = null;
+export function setAuthErrorHandler(handler) {
+  onAuthError = handler;
+}
+
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('rider_token');
   if (token) {
@@ -20,7 +25,8 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      await AsyncStorage.removeItem('rider_token');
+      await AsyncStorage.multiRemove(['rider_token', 'rider_data']);
+      if (onAuthError) onAuthError();
     }
     return Promise.reject(error);
   }
@@ -38,14 +44,25 @@ export const riderAPI = {
   getProfile: (riderId) => api.get(`/riders/${riderId}/profile`),
   getEarnings: (riderId, period) => api.get(`/riders/${riderId}/earnings`, { params: { period } }),
   updateDocuments: (riderId, data) => api.patch(`/riders/${riderId}/documents`, data),
+  getVehicle: (riderId) => api.get(`/riders/${riderId}/vehicle`),
+  updateVehicle: (riderId, data) => api.patch(`/riders/${riderId}/vehicle`, data),
+  getIncentives: (riderId) => api.get(`/riders/${riderId}/incentives`),
+};
+
+export const ticketAPI = {
+  getTickets: () => api.get('/riders/support/tickets'),
+  createTicket: (data) => api.post('/riders/support/tickets', data),
+  getTicket: (id) => api.get(`/riders/support/tickets/${id}`),
+  replyToTicket: (id, message) => api.post(`/riders/support/tickets/${id}/reply`, { message }),
 };
 
 export const bookingAPI = {
   getBooking: (id) => api.get(`/bookings/${id}`),
   acceptBooking: (id) => api.patch(`/bookings/${id}/accept`),
   startBooking: (id) => api.patch(`/bookings/${id}/start`),
-  completeBooking: (id, fare_final) => api.patch(`/bookings/${id}/complete`, { fare_final }),
+  completeBooking: (id) => api.patch(`/bookings/${id}/complete`),
   cancelBooking: (id) => api.patch(`/bookings/${id}/cancel`),
+  getMyBookings: () => api.get('/bookings/my/rider'),
 };
 
 export default api;

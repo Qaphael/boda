@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,16 @@ export default function LoginScreen() {
   const [step, setStep] = useState('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
   const { sendOTP, verifyOTP } = useAuth();
   const otpRefs = [useRef(), useRef(), useRef(), useRef()];
   const { showModal, ModalComponent } = useModal();
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const handleSendOTP = async () => {
     if (!phone || phone.length < 9) {
@@ -33,6 +40,7 @@ export default function LoginScreen() {
     try {
       await sendOTP(`256${phone}`);
       setStep('otp');
+      setCooldown(60);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to send OTP');
     } finally {
@@ -71,15 +79,16 @@ export default function LoginScreen() {
   };
 
   const handleResend = async () => {
+    if (cooldown > 0) return;
     setError('');
     setLoading(true);
-    try { await sendOTP(`256${phone}`); } catch (err) { setError('Failed to resend'); } finally { setLoading(false); }
+    try { await sendOTP(`256${phone}`); setCooldown(60); } catch (err) { setError('Failed to resend'); } finally { setLoading(false); }
   };
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.content}>
-        <View style={styles.brandBadge}><Text style={styles.brandText}>GuluRide Rider</Text></View>
+        <View style={styles.brandBadge}><Text style={styles.brandText}>Boda Rider</Text></View>
 
         <View style={styles.header}>
           <Text style={styles.headline}>Start earning{'\n'}in Gulu</Text>
@@ -113,8 +122,10 @@ export default function LoginScreen() {
                   <TextInput key={i} ref={otpRefs[i]} style={[styles.otpInput, digit ? styles.otpInputFilled : null]} value={digit} onChangeText={(t) => handleOTPChange(t, i)} onKeyPress={(e) => handleKeyPress(e, i)} keyboardType="number-pad" maxLength={1} selectTextOnFocus />
                 ))}
               </View>
-              <TouchableOpacity onPress={handleResend} disabled={loading}>
-                <Text style={styles.resendText}>Resend Code</Text>
+              <TouchableOpacity onPress={handleResend} disabled={loading || cooldown > 0}>
+                <Text style={[styles.resendText, cooldown > 0 && { color: colors.onSurfaceVariant }]}>
+                  {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}

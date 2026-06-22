@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI, riderAPI } from '../services/api';
+import { authAPI, riderAPI, setAuthErrorHandler } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     loadRider();
+    setAuthErrorHandler(() => setRider(null));
   }, []);
 
   const loadRider = async () => {
@@ -34,7 +35,15 @@ export function AuthProvider({ children }) {
     const { data } = await authAPI.verifyOTP(phone, otp);
     await AsyncStorage.setItem('rider_token', data.token);
 
-    const riderData = { id: data.user?.id, phone, ...data.user };
+    const riderData = {
+      id: data.user?.id,
+      phone,
+      riderId: data.rider?.id || null,
+      status: data.rider?.status || null,
+      name: data.rider?.name || data.user?.name,
+      plate_number: data.rider?.plate_number || null,
+      avg_rating: data.rider?.avg_rating || null,
+    };
     await AsyncStorage.setItem('rider_data', JSON.stringify(riderData));
 
     setRider({ token: data.token, ...riderData });

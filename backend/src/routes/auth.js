@@ -101,7 +101,21 @@ const verifyOTP = async (req, reply) => {
       'SELECT id FROM admins WHERE user_id = $1 AND is_active = true',
       [user.rows[0].id]
     );
-    const role = adminCheck.rows.length > 0 ? 'admin' : 'customer';
+
+    const riderCheck = await pool.query(
+      'SELECT id, status, name, plate_number, avg_rating, is_online FROM riders WHERE phone = $1 AND is_deleted = false',
+      [phone]
+    );
+
+    let role = 'customer';
+    let riderInfo = null;
+
+    if (adminCheck.rows.length > 0) {
+      role = 'admin';
+    } else if (riderCheck.rows.length > 0) {
+      role = 'rider';
+      riderInfo = riderCheck.rows[0];
+    }
 
     const token = jwt.sign(
       { userId: user.rows[0].id, phone, role },
@@ -124,8 +138,9 @@ const verifyOTP = async (req, reply) => {
       user: {
         id: user.rows[0].id,
         phone: user.rows[0].phone,
-        name: user.rows[0].name,
+        name: riderInfo?.name || user.rows[0].name,
       },
+      rider: riderInfo,
     });
   } catch (err) {
     req.log.error(err);

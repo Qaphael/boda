@@ -1,101 +1,139 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { riderAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
-import { useModal } from '../components/useModal';
 
-export default function IncentivesScreen() {
-  const { showModal, ModalComponent } = useModal();
+const TIER_COLORS = { Bronze: '#cd7f32', Silver: '#c0c0c0', Gold: '#ffd700', Platinum: '#e5e4e2' };
+
+export default function IncentivesScreen({ navigation }) {
+  const { rider } = useAuth();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadIncentives();
+  }, []);
+
+  const loadIncentives = async () => {
+    try {
+      if (rider?.riderId) {
+        const { data: res } = await riderAPI.getIncentives(rider.riderId);
+        setData(res);
+      }
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
+
+  const tierColor = TIER_COLORS[data?.tier] || '#cd7f32';
+  const progress = data?.nextTierTrips ? Math.min((data?.stats?.totalTrips / data?.nextTierTrips) * 100, 100) : 0;
+
   return (
     <View style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.topTitle}>Rewards & Incentives</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.tierCard}>
-          <Text style={styles.tierLabel}>Current Status</Text>
-          <Text style={styles.tierName}>⭐ Gold Tier</Text>
-          <Text style={styles.tierRating}>Rating: 4.95</Text>
-          <Text style={styles.tierRank}>Top 5% of Gulu riders</Text>
-          <View style={styles.tierBadges}>
-            <View style={styles.tierBadge}><Text style={styles.tierBadgeText}>Lower Service Fees</Text></View>
-            <View style={styles.tierBadge}><Text style={styles.tierBadgeText}>Priority Support</Text></View>
+        <View style={[styles.tierCard, { borderColor: `${tierColor}40` }]}>
+          <View style={[styles.tierBadge, { backgroundColor: `${tierColor}20` }]}>
+            <Text style={[styles.tierText, { color: tierColor }]}>{data?.tier || 'Bronze'} Tier</Text>
+          </View>
+          <Text style={styles.tierRating}>⭐ {data?.stats?.avgRating || '0.0'} Rating</Text>
+          <Text style={styles.tierSub}>{data?.stats?.totalTrips || 0} total trips</Text>
+
+          <View style={styles.progressSection}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: tierColor }]} />
+            </View>
+            <Text style={styles.progressLabel}>{data?.stats?.totalTrips || 0} / {data?.nextTierTrips || '—'} trips to {data?.nextTier || 'Max'}</Text>
           </View>
         </View>
 
-        <View style={styles.progressCard}>
-          <Text style={styles.progressTitle}>Today's Progress</Text>
-          <Text style={styles.progressTarget}>Target: UGX 5,000 Bonus</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: '50%' }]} />
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>💰</Text>
+            <Text style={styles.statValue}>UGX {(data?.stats?.totalEarnings || 0).toLocaleString()}</Text>
+            <Text style={styles.statLabel}>Total Earned</Text>
           </View>
-          <Text style={styles.progressText}>5 / 10 Trips Completed</Text>
-          <Text style={styles.progressTip}>Complete 5 more trips before midnight to unlock your daily bonus!</Text>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>📊</Text>
+            <Text style={styles.statValue}>UGX {(data?.stats?.avgFare || 0).toLocaleString()}</Text>
+            <Text style={styles.statLabel}>Avg Fare</Text>
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>Active Quests</Text>
-        <View style={styles.questCard}>
-          <View style={styles.questHeader}>
-            <Text style={styles.questName}>Weekend Warrior</Text>
-            <View style={styles.questRewardBadge}><Text style={styles.questRewardText}>UGX 15,000</Text></View>
-          </View>
-          <Text style={styles.questDesc}>Friday 6 PM - Sunday Midnight • 20 trips target</Text>
-          <TouchableOpacity style={styles.questBtn} onPress={() => showModal({ icon: '🎯', title: 'Quest', message: 'Weekend Warrior quest activated!' })} activeOpacity={0.8}>
-            <Text style={styles.questBtnText}>Start Quest</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.questCard}>
-          <View style={styles.questHeader}>
-            <Text style={styles.questName}>Loyalty Streak</Text>
-            <View style={styles.questRewardBadge}><Text style={styles.questRewardText}>+2% Earnings</Text></View>
-          </View>
-          <Text style={styles.questDesc}>Maintain 4.8+ rating for 7 days</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: '80%' }]} />
-          </View>
-          <Text style={styles.progressText}>6 / 7 Days</Text>
-        </View>
-
-        <View style={styles.referralCard}>
-          <Text style={styles.referralTitle}>Refer a Friend</Text>
-          <Text style={styles.referralDesc}>Get UGX 2,000 for every rider you bring to Gulu Rider</Text>
-          <TouchableOpacity style={styles.referralBtn} onPress={() => showModal({ icon: '🎁', title: 'Referral', message: 'Referral link sharing coming soon.' })} activeOpacity={0.8}>
-            <Text style={styles.referralBtnText}>Invite Now</Text>
-          </TouchableOpacity>
-        </View>
+        {(data?.quests || []).map((quest) => {
+          const questProgress = Math.min((quest.current / quest.target) * 100, 100);
+          return (
+            <View key={quest.id} style={styles.questCard}>
+              <View style={styles.questHeader}>
+                <Text style={styles.questIcon}>{quest.icon}</Text>
+                <View style={styles.questInfo}>
+                  <Text style={styles.questTitle}>{quest.title}</Text>
+                  <Text style={styles.questDesc}>{quest.description}</Text>
+                </View>
+              </View>
+              <View style={styles.questProgress}>
+                <View style={styles.questProgressBar}>
+                  <View style={[styles.questProgressFill, { width: `${questProgress}%` }]} />
+                </View>
+                <Text style={styles.questProgressText}>{quest.current}/{quest.target}</Text>
+              </View>
+              <View style={styles.questReward}>
+                <Text style={styles.questRewardLabel}>Reward:</Text>
+                <Text style={styles.questRewardValue}>{quest.reward}</Text>
+              </View>
+            </View>
+          );
+        })}
 
         <View style={{ height: 100 }} />
       </ScrollView>
-      <ModalComponent />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 60 },
-  tierCard: { marginHorizontal: spacing.lg, backgroundColor: colors.inverseSurface, borderRadius: 24, padding: spacing.xl, marginBottom: spacing.xl },
-  tierLabel: { ...typography.labelSm, color: colors.secondaryFixedDim, textTransform: 'uppercase', letterSpacing: 1 },
-  tierName: { ...typography.headlineMd, color: colors.surfaceBright, marginTop: 4 },
-  tierRating: { ...typography.titleMd, color: colors.primaryContainer, marginTop: 4 },
-  tierRank: { ...typography.labelLg, color: colors.secondaryFixedDim, marginTop: 2 },
-  tierBadges: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  tierBadge: { backgroundColor: `${colors.primaryContainer}33`, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full },
-  tierBadgeText: { ...typography.labelSm, color: colors.primaryContainer },
-  progressCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLowest, borderRadius: 24, padding: spacing.xl, borderWidth: 1, borderColor: colors.outlineVariant, borderLeftWidth: 4, borderLeftColor: colors.primary, marginBottom: spacing.xl },
-  progressTitle: { ...typography.titleMd, color: colors.onSurface },
-  progressTarget: { ...typography.labelLg, color: colors.primary, marginTop: 4, marginBottom: spacing.md },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerHigh, alignItems: 'center', justifyContent: 'center' },
+  backIcon: { fontSize: 18, color: colors.onSurface },
+  topTitle: { ...typography.titleLg, color: colors.onSurface, fontWeight: '700' },
+  tierCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLow, borderRadius: 24, padding: spacing.xl, borderWidth: 2, marginBottom: spacing.xl, alignItems: 'center' },
+  tierBadge: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: radius.full, marginBottom: spacing.md },
+  tierText: { ...typography.titleMd, fontWeight: '800' },
+  tierRating: { ...typography.headlineMd, color: colors.onSurface },
+  tierSub: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginTop: 4 },
+  progressSection: { width: '100%', marginTop: spacing.lg },
   progressBar: { height: 8, backgroundColor: colors.surfaceContainerHigh, borderRadius: 4, marginBottom: spacing.sm },
-  progressFill: { height: 8, backgroundColor: colors.primary, borderRadius: 4 },
-  progressText: { ...typography.labelLg, color: colors.onSurface },
-  progressTip: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: spacing.sm, lineHeight: 18 },
+  progressFill: { height: 8, borderRadius: 4 },
+  progressLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, textAlign: 'center' },
+  statsGrid: { flexDirection: 'row', paddingHorizontal: spacing.lg, gap: spacing.md, marginBottom: spacing.xl },
+  statCard: { flex: 1, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.xl, padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.outlineVariant },
+  statIcon: { fontSize: 24, marginBottom: spacing.sm },
+  statValue: { ...typography.titleMd, color: colors.onSurface, fontWeight: '700' },
+  statLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
   sectionTitle: { ...typography.titleMd, color: colors.onSurface, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  questCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.outlineVariant, marginBottom: spacing.md },
-  questHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  questName: { ...typography.titleMd, color: colors.onSurface },
-  questRewardBadge: { backgroundColor: colors.primaryContainer, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
-  questRewardText: { ...typography.labelSm, color: colors.onPrimaryContainer, fontWeight: '700' },
-  questDesc: { ...typography.labelSm, color: colors.onSurfaceVariant, marginBottom: spacing.md },
-  questBtn: { backgroundColor: colors.primaryContainer, height: 44, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
-  questBtnText: { ...typography.labelLg, color: colors.onPrimaryContainer, fontWeight: '700' },
-  referralCard: { marginHorizontal: spacing.lg, backgroundColor: colors.primaryContainer, borderRadius: 24, padding: spacing.xl, marginBottom: spacing.xl },
-  referralTitle: { ...typography.headlineMd, color: colors.onPrimaryContainer },
-  referralDesc: { ...typography.bodyMd, color: colors.onPrimaryContainer, opacity: 0.8, marginTop: spacing.sm, marginBottom: spacing.lg },
-  referralBtn: { backgroundColor: colors.inverseSurface, height: spacing.touchMin, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center' },
-  referralBtnText: { ...typography.titleMd, color: colors.inverseOnSurface },
+  questCard: { marginHorizontal: spacing.lg, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.outlineVariant, marginBottom: spacing.md },
+  questHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  questIcon: { fontSize: 32, marginRight: spacing.md },
+  questInfo: { flex: 1 },
+  questTitle: { ...typography.titleMd, color: colors.onSurface, fontWeight: '700' },
+  questDesc: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
+  questProgress: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+  questProgressBar: { flex: 1, height: 6, backgroundColor: colors.surfaceContainerHigh, borderRadius: 3 },
+  questProgressFill: { height: 6, backgroundColor: colors.primary, borderRadius: 3 },
+  questProgressText: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: '600' },
+  questReward: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  questRewardLabel: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  questRewardValue: { ...typography.labelLg, color: colors.primary, fontWeight: '700' },
 });

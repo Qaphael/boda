@@ -10,7 +10,7 @@ export default function AppModal({ visible, onClose, title, message, actions, ic
           {title && <Text style={styles.title}>{title}</Text>}
           {message && <Text style={styles.message}>{message}</Text>}
           <View style={styles.actions}>
-            {actions.map((action, i) => (
+            {(actions || []).map((action, i) => (
               <TouchableOpacity
                 key={i}
                 style={[styles.btn, action.primary ? styles.btnPrimary : styles.btnSecondary]}
