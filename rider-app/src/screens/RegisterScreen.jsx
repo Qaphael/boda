@@ -23,7 +23,7 @@ export default function RegisterScreen({ navigation }) {
   const { showModal, ModalComponent } = useModal();
 
   const pickImage = async (type) => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.5 });
     if (!result.canceled) setForm({ ...form, [type]: result.assets[0].uri });
   };
 
