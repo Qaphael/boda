@@ -294,8 +294,8 @@ const getRiderEarnings = async (req, reply) => {
          COALESCE(SUM(fare_final), 0) as total_revenue,
          COALESCE(AVG(fare_final), 0) as avg_fare,
          COALESCE(MAX(fare_final), 0) as highest_fare
-       FROM bookings
-       WHERE rider_id = $1 AND status = 'completed' ${dateFilter}`,
+       FROM bookings b
+       WHERE b.rider_id = $1 AND b.status = 'completed' ${dateFilter}`,
       params
     );
 
