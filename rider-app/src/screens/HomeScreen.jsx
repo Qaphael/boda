@@ -72,7 +72,7 @@ function buildMapHTML(lat, lng) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { rider, logout } = useAuth();
+  const { rider, logout, refreshProfile } = useAuth();
   const webViewRef = useRef(null);
   const [isOnline, setIsOnline] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -115,9 +115,7 @@ export default function HomeScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      loadProfile();
-      loadEarnings();
-      if (location) loadNearbyBookings();
+      loadAllData();
     }, [])
   );
 
@@ -158,7 +156,11 @@ export default function HomeScreen({ navigation }) {
 
   const loadProfile = async () => {
     try {
-      if (rider?.riderId) {
+      const updated = await refreshProfile();
+      if (updated) {
+        setProfile(updated);
+        setIsOnline(updated.is_online || false);
+      } else if (rider?.riderId) {
         const { data } = await riderAPI.getProfile(rider.riderId);
         setProfile(data.rider);
         setIsOnline(data.rider?.is_online || false);
@@ -188,6 +190,12 @@ export default function HomeScreen({ navigation }) {
         );
       }
     } catch (err) {}
+  };
+
+  const loadAllData = async () => {
+    await loadProfile();
+    loadEarnings();
+    if (location) loadNearbyBookings();
   };
 
   const toggleOnline = async (value) => {

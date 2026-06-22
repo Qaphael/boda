@@ -1,17 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI } from '../services/api';
+import { useAdminSocket } from '../hooks/useAdminSocket';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [recentRiders, setRecentRiders] = useState([]);
   const [ticketStats, setTicketStats] = useState(null);
+  const [liveIndicator, setLiveIndicator] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    loadDashboard();
-  }, []);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -30,6 +28,31 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const handleSocketEvent = useCallback((event, data) => {
+    setLiveIndicator(true);
+    setTimeout(() => setLiveIndicator(false), 2000);
+
+    if (event === 'rider:status-changed' && stats) {
+      setStats(prev => ({
+        ...prev,
+        riders: {
+          ...prev.riders,
+          online: data.onlineCount ?? prev.riders?.online,
+        },
+      }));
+    }
+
+    if (event === 'dashboard:refresh') {
+      loadDashboard();
+    }
+  }, [stats]);
+
+  useAdminSocket(handleSocketEvent);
 
   const handleExport = () => {
     if (!stats) return;
@@ -116,7 +139,15 @@ export default function Dashboard() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-display text-on-surface">Dashboard Overview</h1>
-          <p className="text-body-md text-on-surface-variant">Real-time operational status</p>
+          <p className="text-body-md text-on-surface-variant flex items-center gap-2">
+            Real-time operational status
+            {liveIndicator && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-primary font-bold">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                LIVE UPDATE
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           <button onClick={loadDashboard} className="px-3 py-1 border border-outline-variant bg-surface rounded text-label-md flex items-center gap-1 hover:bg-surface-container transition-colors">

@@ -57,6 +57,10 @@ const start = async () => {
     io.on('connection', async (socket) => {
       console.log('Client connected:', socket.id);
 
+      if (socket.userRole === 'admin') {
+        socket.join('admin:dashboard');
+      }
+
       let riderId = null;
       if (socket.userRole === 'rider') {
         const rider = await pool.query('SELECT id FROM riders WHERE phone = $1 AND is_deleted = false', [socket.userPhone]);
@@ -75,6 +79,17 @@ const start = async () => {
         }
       });
 
+      socket.on('rider:status', async ({ is_online }) => {
+        if (socket.userRole !== 'rider' || !riderId) return;
+
+        const onlineCount = await redis.hLen('riders:online');
+        io.to('admin:dashboard').emit('rider:status-changed', {
+          riderId,
+          is_online,
+          onlineCount,
+        });
+      });
+
       socket.on('join:booking', async ({ bookingId }) => {
         const booking = await pool.query(
           'SELECT customer_id, rider_id FROM bookings WHERE id = $1', [bookingId]
@@ -91,12 +106,24 @@ const start = async () => {
         console.log('Client disconnected:', socket.id);
       });
 
-      socket.on('rider:go-online', () => {
+      socket.on('rider:go-online', async () => {
         socket.join('riders:online');
+        if (riderId) {
+          await redis.hSet('riders:online', riderId, JSON.stringify({ is_online: true, updatedAt: Date.now() }));
+          const onlineCount = await redis.hLen('riders:online');
+          io.to('admin:dashboard').emit('rider:status-changed', { riderId, is_online: true, onlineCount });
+          io.to('admin:dashboard').emit('dashboard:refresh');
+        }
       });
 
-      socket.on('rider:go-offline', () => {
+      socket.on('rider:go-offline', async () => {
         socket.leave('riders:online');
+        if (riderId) {
+          await redis.hDel('riders:online', riderId);
+          const onlineCount = await redis.hLen('riders:online');
+          io.to('admin:dashboard').emit('rider:status-changed', { riderId, is_online: false, onlineCount });
+          io.to('admin:dashboard').emit('dashboard:refresh');
+        }
       });
     });
 
@@ -106,6 +133,7 @@ const start = async () => {
       try {
         const data = JSON.parse(message);
         io.to('riders:online').emit('booking:new', data);
+        io.to('admin:dashboard').emit('booking:created', data);
       } catch (e) {}
     });
 

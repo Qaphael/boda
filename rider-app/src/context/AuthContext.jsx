@@ -27,6 +27,34 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const refreshProfile = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('rider_token');
+      const riderData = await AsyncStorage.getItem('rider_data');
+      if (!token || !riderData) return;
+
+      const parsed = JSON.parse(riderData);
+      if (parsed.riderId) {
+        const { data } = await riderAPI.getProfile(parsed.riderId);
+        const fresh = data.rider;
+        const updated = {
+          ...parsed,
+          status: fresh?.status || parsed.status,
+          name: fresh?.name || parsed.name,
+          plate_number: fresh?.plate_number || parsed.plate_number,
+          avg_rating: fresh?.avg_rating || parsed.avg_rating,
+          is_online: fresh?.is_online || false,
+        };
+        await AsyncStorage.setItem('rider_data', JSON.stringify(updated));
+        setRider({ token, ...updated });
+        return updated;
+      }
+    } catch (err) {
+      console.error('Failed to refresh profile:', err);
+    }
+    return null;
+  }, []);
+
   const sendOTP = async (phone) => {
     await authAPI.sendOTP(phone);
   };
@@ -64,7 +92,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ rider, loading, sendOTP, verifyOTP, register, logout }}>
+    <AuthContext.Provider value={{ rider, loading, sendOTP, verifyOTP, register, logout, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
