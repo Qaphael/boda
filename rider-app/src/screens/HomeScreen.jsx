@@ -11,6 +11,7 @@ import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
+const GULU_CENTER = { lat: 2.7700, lng: 32.2900 };
 
 function buildMapHTML(lat, lng) {
   return `<!DOCTYPE html>
@@ -24,15 +25,18 @@ function buildMapHTML(lat, lng) {
 <body>
   <div id="map"></div>
   <script>
-    var map = L.map('map', { zoomControl: false }).setView([${lat}, ${lng}], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '\\u00a9 OpenStreetMap' }).addTo(map);
-    L.marker([${lat}, ${lng}], {
-      icon: L.divIcon({
-        className: '',
-        html: '<div style="width:16px;height:16px;border-radius:50%;background:#4285f4;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-      })
+    var map = L.map('map', {
+      zoomControl: false,
+      attributionControl: false,
+      zoomSnap: false
+    }).setView([${lat}, ${lng}], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    var userMarker = L.circleMarker([${lat}, ${lng}], {
+      radius: 7, fillColor: '#0050cb', color: '#fff', weight: 3, fillOpacity: 1
     }).addTo(map);
 
     var bookingMarkers = [];
@@ -59,6 +63,7 @@ function buildMapHTML(lat, lng) {
     };
 
     window.recenterMap = function(lat, lng) {
+      userMarker.setLatLng([lat, lng]);
       map.setView([lat, lng], 15, { animate: true });
     };
   </script>
@@ -74,6 +79,7 @@ export default function HomeScreen({ navigation }) {
   const [earnings, setEarnings] = useState(null);
   const [nearbyBookings, setNearbyBookings] = useState([]);
   const [location, setLocation] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
   const socketRef = useRef(null);
   const { showModal, ModalComponent } = useModal();
 
@@ -103,41 +109,52 @@ export default function HomeScreen({ navigation }) {
     return () => socket.disconnect();
   }, [rider?.token]);
 
+  useEffect(() => {
+    requestLocation();
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadProfile();
       loadEarnings();
-      loadNearbyBookings();
+      if (location) loadNearbyBookings();
     }, [])
   );
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
     if (location) {
       loadNearbyBookings();
-      const interval = setInterval(loadNearbyBookings, 60000);
+      const interval = setInterval(loadNearbyBookings, 30000);
       return () => clearInterval(interval);
     }
   }, [location]);
 
   useEffect(() => {
-    if (location && webViewRef.current) {
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(
-          `window.recenterMap(${location.lat}, ${location.lng});`
-        );
-      }, 500);
+    if (mapReady && location && webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `window.recenterMap(${location.lat}, ${location.lng});`
+      );
     }
-  }, [location]);
+  }, [mapReady, location]);
+
+  const requestLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    } catch (err) {
+      console.error('Location error:', err);
+    }
+  };
+
+  const recenter = () => {
+    if (location && webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `window.recenterMap(${location.lat}, ${location.lng});`
+      );
+    }
+  };
 
   const loadProfile = async () => {
     try {
@@ -161,7 +178,6 @@ export default function HomeScreen({ navigation }) {
   };
 
   const loadNearbyBookings = async () => {
-    if (!location) return;
     try {
       const { data } = await bookingAPI.getMyBookings();
       const active = (data.bookings || []).filter(b => b.status === 'pending' || b.status === 'accepted');
@@ -194,18 +210,18 @@ export default function HomeScreen({ navigation }) {
     });
   };
 
-  const mapLat = location?.lat || 2.77;
-  const mapLng = location?.lng || 32.29;
+  const center = location || GULU_CENTER;
 
   return (
     <View style={styles.container}>
       <View style={styles.mapContainer}>
         <WebView
           ref={webViewRef}
-          source={{ html: buildMapHTML(mapLat, mapLng) }}
+          source={{ html: buildMapHTML(center.lat, center.lng) }}
           style={styles.map}
           originWhitelist={['*']}
           javaScriptEnabled
+          onLoadEnd={() => setMapReady(true)}
         />
         <View style={styles.topBar}>
           <View style={styles.appBadge}>
@@ -215,6 +231,12 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.notifIcon}>🎧</Text>
           </TouchableOpacity>
         </View>
+
+        {location && (
+          <TouchableOpacity style={styles.recenterBtn} onPress={recenter} activeOpacity={0.8}>
+            <Text style={styles.recenterIcon}>◎</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.onlineToggleContainer}>
           <View style={[styles.onlinePill, isOnline && styles.onlinePillActive]}>
@@ -295,6 +317,8 @@ const styles = StyleSheet.create({
   appBadgeText: { ...typography.labelLg, color: colors.onPrimaryContainer, fontWeight: '700' },
   notifBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: `${colors.surface}ee`, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   notifIcon: { fontSize: 20 },
+  recenterBtn: { position: 'absolute', right: 16, top: 120, width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3, zIndex: 10 },
+  recenterIcon: { fontSize: 22, color: colors.onSurface },
   onlineToggleContainer: { position: 'absolute', top: 120, alignSelf: 'center', zIndex: 10 },
   onlinePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.surface}ee`, paddingHorizontal: 20, paddingVertical: 10, borderRadius: radius.full, borderWidth: 2, borderColor: colors.outlineVariant, gap: 10 },
   onlinePillActive: { borderColor: '#22c55e', backgroundColor: '#22c55e1a' },
