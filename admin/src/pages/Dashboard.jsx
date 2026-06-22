@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI } from '../services/api';
 import { useAdminSocket } from '../hooks/useAdminSocket';
@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [ticketStats, setTicketStats] = useState(null);
   const [liveIndicator, setLiveIndicator] = useState(false);
   const navigate = useNavigate();
+  const loadRef = useRef(null);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -29,6 +30,8 @@ export default function Dashboard() {
     }
   };
 
+  loadRef.current = loadDashboard;
+
   useEffect(() => {
     loadDashboard();
   }, []);
@@ -37,20 +40,23 @@ export default function Dashboard() {
     setLiveIndicator(true);
     setTimeout(() => setLiveIndicator(false), 2000);
 
-    if (event === 'rider:status-changed' && stats) {
-      setStats(prev => ({
-        ...prev,
-        riders: {
-          ...prev.riders,
-          online: data.onlineCount ?? prev.riders?.online,
-        },
-      }));
+    if (event === 'rider:status-changed') {
+      setStats(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          riders: {
+            ...prev.riders,
+            online: data.onlineCount ?? prev.riders?.online,
+          },
+        };
+      });
     }
 
     if (event === 'dashboard:refresh') {
-      loadDashboard();
+      loadRef.current?.();
     }
-  }, [stats]);
+  }, []);
 
   useAdminSocket(handleSocketEvent);
 
