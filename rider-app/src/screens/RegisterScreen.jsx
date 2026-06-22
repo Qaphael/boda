@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { readAsStringAsync } from 'expo-file-system/legacy';
 import { useAuth } from '../context/AuthContext';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
@@ -9,7 +9,7 @@ import { useModal } from '../components/useModal';
 const STEPS = ['Details', 'Verify', 'Done'];
 
 async function uriToBase64(uri) {
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  const base64 = await readAsStringAsync(uri, { encoding: 'base64' });
   const ext = uri.split('.').pop()?.toLowerCase() || 'jpeg';
   const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
   return `data:${mime};base64,${base64}`;
@@ -23,7 +23,7 @@ export default function RegisterScreen({ navigation }) {
   const { showModal, ModalComponent } = useModal();
 
   const pickImage = async (type) => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.8 });
     if (!result.canceled) setForm({ ...form, [type]: result.assets[0].uri });
   };
 
@@ -45,7 +45,8 @@ export default function RegisterScreen({ navigation }) {
       await register({ phone: rider?.phone, name: form.name, national_id: form.national_id, plate_number: form.plate_number, id_photo: id_photo_b64, selfie_photo: selfie_photo_b64 });
       showModal({ icon: '✅', title: 'Success', message: 'Registration submitted! Awaiting admin verification.', onClose: () => navigation.replace('Main') });
     } catch (err) {
-      showModal({ icon: '⚠️', title: 'Error', message: err.response?.data?.error || 'Registration failed' });
+      console.error('Registration error:', err?.response?.data || err.message || err);
+      showModal({ icon: '⚠️', title: 'Error', message: err.response?.data?.error || err.message || 'Registration failed' });
     } finally { setLoading(false); }
   };
 
