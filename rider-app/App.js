@@ -12,6 +12,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import EarningsScreen from './src/screens/EarningsScreen';
 import IncentivesScreen from './src/screens/IncentivesScreen';
 import SupportScreen from './src/screens/SupportScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import VehicleSafetyScreen from './src/screens/VehicleSafetyScreen';
 import BookingRequestScreen from './src/screens/BookingRequestScreen';
 import ActiveBookingScreen from './src/screens/ActiveBookingScreen';
@@ -44,8 +45,8 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home', tabBarIcon: () => <TabIcon emoji="🏠" /> }} />
       <Tab.Screen name="EarningsTab" component={EarningsScreen} options={{ tabBarLabel: 'Earnings', tabBarIcon: () => <TabIcon emoji="💰" /> }} />
-      <Tab.Screen name="Incentives" component={IncentivesScreen} options={{ tabBarLabel: 'Incentives', tabBarIcon: () => <TabIcon emoji="⭐" /> }} />
-      <Tab.Screen name="Support" component={SupportScreen} options={{ tabBarLabel: 'Help', tabBarIcon: () => <TabIcon emoji="❓" /> }} />
+      <Tab.Screen name="Incentives" component={IncentivesScreen} options={{ tabBarLabel: 'Rewards', tabBarIcon: () => <TabIcon emoji="⭐" /> }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
     </Tab.Navigator>
   );
 }
@@ -71,6 +72,7 @@ function AppNavigator() {
           <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="Earnings" component={EarningsScreen} />
           <Stack.Screen name="Vehicle" component={VehicleSafetyScreen} />
+          <Stack.Screen name="Support" component={SupportScreen} />
           <Stack.Screen name="BookingRequest" component={BookingRequestScreen} />
           <Stack.Screen name="ActiveBooking" component={ActiveBookingScreen} />
           <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
