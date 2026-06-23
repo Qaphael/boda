@@ -483,6 +483,10 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.quickLinkIcon}>💰</Text>
                 <Text style={styles.quickLinkLabel}>Earnings</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.quickLinkCard} onPress={() => navigation.navigate('RideHistory')} activeOpacity={0.7}>
+                <Text style={styles.quickLinkIcon}>📋</Text>
+                <Text style={styles.quickLinkLabel}>History</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.quickLinkCard} onPress={() => navigation.navigate('Vehicle')} activeOpacity={0.7}>
                 <Text style={styles.quickLinkIcon}>🔧</Text>
                 <Text style={styles.quickLinkLabel}>Vehicle</Text>

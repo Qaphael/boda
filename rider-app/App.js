@@ -17,6 +17,7 @@ import VehicleSafetyScreen from './src/screens/VehicleSafetyScreen';
 import BookingRequestScreen from './src/screens/BookingRequestScreen';
 import ActiveBookingScreen from './src/screens/ActiveBookingScreen';
 import TripDetailsScreen from './src/screens/TripDetailsScreen';
+import RideHistoryScreen from './src/screens/RideHistoryScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -76,6 +77,7 @@ function AppNavigator() {
           <Stack.Screen name="BookingRequest" component={BookingRequestScreen} />
           <Stack.Screen name="ActiveBooking" component={ActiveBookingScreen} />
           <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
+          <Stack.Screen name="RideHistory" component={RideHistoryScreen} />
         </>
       )}
     </Stack.Navigator>
