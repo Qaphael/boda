@@ -160,11 +160,19 @@ export default function HomeScreen({ navigation }) {
       const pLng = parseFloat(activeBooking.pickup_lng) || 32.29;
       const dLat = parseFloat(activeBooking.dropoff_lat) || 2.78;
       const dLng = parseFloat(activeBooking.dropoff_lng) || 32.30;
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(`window.showRoute(${pLat},${pLng},${dLat},${dLng});`);
-      }, 500);
+      if (tripPhase === 'enroute') {
+        setTimeout(() => {
+          webViewRef.current?.injectJavaScript(
+            `window.showRoute(${location?.lat || 2.77},${location?.lng || 32.29},${pLat},${pLng});`
+          );
+        }, 500);
+      } else if (tripPhase === 'trip') {
+        setTimeout(() => {
+          webViewRef.current?.injectJavaScript(`window.showRoute(${pLat},${pLng},${dLat},${dLng});`);
+        }, 500);
+      }
     }
-  }, [activeBooking]);
+  }, [activeBooking, tripPhase]);
 
   const requestLocation = async () => {
     try {
@@ -187,7 +195,7 @@ export default function HomeScreen({ navigation }) {
       const active = (data.bookings || []).find(b => b.status === 'accepted' || b.status === 'in_progress');
       if (active) {
         setActiveBooking(active);
-        setTripPhase(active.status === 'accepted' ? 'pickup' : 'trip');
+        setTripPhase(active.status === 'accepted' ? 'enroute' : 'trip');
       }
     } catch (err) {}
   };
@@ -239,7 +247,7 @@ export default function HomeScreen({ navigation }) {
     try {
       await bookingAPI.acceptBooking(pendingBooking.id);
       setActiveBooking(pendingBooking);
-      setTripPhase('pickup');
+      setTripPhase('enroute');
       setPendingBooking(null);
     } catch (err) {
       showModal({ icon: '⚠️', title: 'Error', message: err.response?.data?.error || 'Failed to accept booking' });
@@ -248,6 +256,18 @@ export default function HomeScreen({ navigation }) {
 
   const handleDecline = () => {
     setPendingBooking(null);
+  };
+
+  const handleArrivedAtPickup = () => {
+    showModal({
+      icon: '📍',
+      title: 'Arrived at Pickup?',
+      message: 'Confirm that you have arrived at the customer\'s pickup location.',
+      actions: [
+        { label: 'Not Yet' },
+        { label: 'Yes, Arrived', primary: true, onPress: handleConfirmPickup },
+      ],
+    });
   };
 
   const handleConfirmPickup = async () => {
@@ -302,6 +322,8 @@ export default function HomeScreen({ navigation }) {
   const dropoff = activeBooking?.dropoff_address || 'Dropoff location';
   const fare = activeBooking?.fare_estimate || 0;
   const distance = activeBooking?.distance_km ? `${activeBooking.distance_km} km` : '--';
+  const phaseText = tripPhase === 'enroute' ? 'Heading to Pickup' : tripPhase === 'pickup' ? 'At Pickup' : 'Trip in Progress';
+  const phaseIcon = tripPhase === 'enroute' ? '📍' : tripPhase === 'pickup' ? '🤝' : '🚗';
 
   return (
     <View style={styles.container}>
@@ -349,7 +371,7 @@ export default function HomeScreen({ navigation }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.tripCustomerName}>{customerName}</Text>
-                <Text style={styles.tripPhaseText}>{tripPhase === 'pickup' ? 'Heading to Pickup' : 'Trip in Progress'}</Text>
+                <Text style={styles.tripPhaseText}>{phaseIcon} {phaseText}</Text>
               </View>
               {tripPhase === 'trip' && (
                 <TouchableOpacity style={styles.sosBtn} onPress={() => showModal({ icon: '🚨', title: 'SOS', message: 'Emergency support is not yet available. Call 112 for emergencies.' })} activeOpacity={0.7}>
@@ -390,13 +412,14 @@ export default function HomeScreen({ navigation }) {
             </View>
 
             <View style={styles.tripActions}>
-              {tripPhase === 'pickup' ? (
-                <TouchableOpacity style={styles.primaryBtn} onPress={handleConfirmPickup} disabled={loadingAction} activeOpacity={0.8}>
-                  {loadingAction ? <ActivityIndicator color={colors.onPrimaryContainer} /> : <Text style={styles.primaryBtnText}>Confirm Pickup</Text>}
+              {tripPhase === 'enroute' && (
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleArrivedAtPickup} activeOpacity={0.8}>
+                  <Text style={styles.primaryBtnText}>📍 Arrived at Pickup</Text>
                 </TouchableOpacity>
-              ) : (
+              )}
+              {tripPhase === 'trip' && (
                 <TouchableOpacity style={styles.primaryBtn} onPress={handleCompleteTrip} disabled={loadingAction} activeOpacity={0.8}>
-                  {loadingAction ? <ActivityIndicator color={colors.onPrimaryContainer} /> : <Text style={styles.primaryBtnText}>Destination Reached</Text>}
+                  {loadingAction ? <ActivityIndicator color={colors.onPrimaryContainer} /> : <Text style={styles.primaryBtnText}>🚗 Destination Reached</Text>}
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelTrip} activeOpacity={0.8}>

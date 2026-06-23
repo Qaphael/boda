@@ -337,8 +337,8 @@ export default function TrackingScreen({ route, navigation }) {
     if (!booking) return '';
     switch (booking.status) {
       case 'pending': return 'Finding a rider...';
-      case 'accepted': return 'Rider is on the way';
-      case 'in_progress': return 'Trip in progress';
+      case 'accepted': return 'Rider heading to you';
+      case 'in_progress': return 'On the way to destination';
       case 'completed': return 'Trip completed!';
       case 'cancelled': return 'Trip cancelled';
       default: return booking.status;
