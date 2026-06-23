@@ -1,21 +1,25 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Platform,
+  Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { WebView } from 'react-native-webview';
+import * as NavigationBar from 'expo-navigation-bar';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import { bookingAPI, riderAPI } from '../services/api';
-import Grabber from '../components/Grabber';
 import { colors, typography, spacing, radius } from '../theme';
+import RecenterButton from '../components/RecenterButton';
 
 const GULU_CENTER = { latitude: 2.7700, longitude: 32.2900 };
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 function buildMapHTML(lat, lng, riders) {
   const riderMarkers = riders.map(r => {
@@ -100,14 +104,19 @@ function buildMapHTML(lat, lng, riders) {
 
 export default function HomeScreen({ navigation }) {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
+  const sheetRef = useRef(null);
   const [location, setLocation] = useState(null);
   const [nearbyRiders, setNearbyRiders] = useState([]);
   const [recentBookings, setRecentBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
 
+  const snapPoints = useMemo(() => ['25%', '55%'], []);
+
   useEffect(() => {
+    try { NavigationBar.setStyle('dark'); } catch (e) {}
     requestLocation();
     loadRecentBookings();
   }, []);
@@ -129,10 +138,22 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     if (mapReady && nearbyRiders.length > 0 && webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.updateRiders(${JSON.stringify(JSON.stringify(nearbyRiders))});`
+        `window.updateRiders(${JSON.stringify(JSON.stringify(nearbyRiders))}); true;`
       );
     }
   }, [nearbyRiders, mapReady]);
+
+  const handleSheetChange = useCallback((index) => {
+    const snapPercents = [0.25, 0.55];
+    const sheetHeight = SCREEN_HEIGHT * (snapPercents[index] ?? 0.25);
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        map.invalidateSize();
+        map.panBy([0, -${Math.round(sheetHeight / 4)}], { animate: false });
+        true;
+      `);
+    }
+  }, []);
 
   const requestLocation = async () => {
     try {
@@ -188,7 +209,7 @@ export default function HomeScreen({ navigation }) {
   const recenter = () => {
     if (location && webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.recenterMap(${location.latitude}, ${location.longitude});`
+        `window.recenterMap(${location.latitude}, ${location.longitude}); true;`
       );
     }
   };
@@ -197,22 +218,22 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* MAP — full screen, behind everything */}
       <WebView
         ref={webViewRef}
         source={{ html: mapHtml }}
-        style={styles.map}
+        style={StyleSheet.absoluteFill}
         originWhitelist={['*']}
         javaScriptEnabled={true}
         onLoadEnd={() => setMapReady(true)}
       />
 
+      {/* ABSOLUTE OVERLAYS — status pill and recenter */}
       {location && (
-        <TouchableOpacity style={styles.recenterBtn} onPress={recenter} activeOpacity={0.8}>
-          <Text style={styles.recenterIcon}>◎</Text>
-        </TouchableOpacity>
+        <RecenterButton onPress={recenter} top={insets.top + 64} />
       )}
 
-      <View style={styles.statusBar}>
+      <View style={[styles.statusBar, { top: insets.top + 8 }]}>
         <View style={styles.statusPill}>
           <View style={styles.statusDot} />
           <Text style={styles.statusText}>
@@ -223,31 +244,46 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      <View style={styles.bottomArea}>
-        <View style={styles.floatingActions}>
-          <TouchableOpacity
-            style={styles.rideCard}
-            onPress={() => navigation.navigate('NewBooking', { type: 'ride' })}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.actionIcon}>🏍</Text>
-            <Text style={styles.actionTitle}>Request Ride</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deliveryCard}
-            onPress={() => navigation.navigate('DeliveryDetails')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.actionIcon}>📦</Text>
-            <Text style={styles.actionTitle}>Send Delivery</Text>
-          </TouchableOpacity>
-        </View>
+      {/* BOTTOM SHEET — @gorhom/bottom-sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={handleSheetChange}
+        handleIndicatorStyle={styles.grabber}
+        backgroundStyle={styles.sheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView
+          contentContainerStyle={styles.sheetContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Floating action cards */}
+          <View style={styles.floatingActions}>
+            <TouchableOpacity
+              style={styles.rideCard}
+              onPress={() => navigation.navigate('NewBooking', { type: 'ride' })}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionIcon}>🏍</Text>
+              <Text style={styles.actionTitle}>Request Ride</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deliveryCard}
+              onPress={() => navigation.navigate('DeliveryDetails')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionIcon}>📦</Text>
+              <Text style={styles.actionTitle}>Send Delivery</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.bottomSheet}>
-        <Grabber />
-        <View style={styles.sheetContent}>
+          {/* Greeting */}
           <Text style={styles.greeting}>Hello, {user?.name || 'there'}!</Text>
 
+          {/* Recent Activity */}
           <View style={styles.activityHeader}>
             <Text style={styles.sectionTitle}>Recent Activity</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Activity')}>
@@ -255,46 +291,43 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.activityList} showsVerticalScrollIndicator={false}>
-            {recentBookings.length === 0 ? (
-              <Text style={styles.emptyText}>No recent activity</Text>
-            ) : (
-              recentBookings.slice(0, 2).map((booking) => (
-                <TouchableOpacity
-                  key={booking.id}
-                  style={styles.activityItem}
-                  onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-                  activeOpacity={0.7}
-                >
-                  <View style={[
-                    styles.activityIconBg,
-                    booking.type === 'delivery' ? styles.deliveryIconBg : null,
-                  ]}>
-                    <Text style={styles.activityIconText}>
-                      {booking.type === 'delivery' ? '📦' : '🏍'}
-                    </Text>
-                  </View>
-                  <View style={styles.activityInfo}>
-                    <Text style={styles.activityTitle}>
-                      {booking.type === 'ride' ? 'Ride' : 'Delivery'}
-                    </Text>
-                    <Text style={styles.activityStatus}>
-                      Status: {booking.status?.replace('_', ' ')}
-                    </Text>
-                  </View>
-                  <View style={styles.activityRight}>
-                    <Text style={styles.activityFare}>
-                      UGX {(booking.fare_estimate || 0).toLocaleString()}
-                    </Text>
-                    <Text style={styles.activityTime}>{formatTime(booking.created_at)}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        </View>
-        </View>
-      </View>
+          {(recentBookings || []).slice(0, 2).map((booking) => (
+            <TouchableOpacity
+              key={booking.id}
+              style={styles.activityItem}
+              onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+              activeOpacity={0.7}
+            >
+              <View style={[
+                styles.activityIconBg,
+                booking.type === 'delivery' ? styles.deliveryIconBg : null,
+              ]}>
+                <Text style={styles.activityIconText}>
+                  {booking.type === 'delivery' ? '📦' : '🏍'}
+                </Text>
+              </View>
+              <View style={styles.activityInfo}>
+                <Text style={styles.activityTitle}>
+                  {booking.type === 'ride' ? 'Ride' : 'Delivery'}
+                </Text>
+                <Text style={styles.activityStatus}>
+                  Status: {booking.status?.replace('_', ' ')}
+                </Text>
+              </View>
+              <View style={styles.activityRight}>
+                <Text style={styles.activityFare}>
+                  UGX {(booking.fare_estimate || 0).toLocaleString()}
+                </Text>
+                <Text style={styles.activityTime}>{formatTime(booking.created_at)}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {recentBookings.length === 0 && (
+            <Text style={styles.emptyText}>No recent activity</Text>
+          )}
+        </BottomSheetScrollView>
+      </BottomSheet>
     </View>
   );
 }
@@ -303,25 +336,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  bottomArea: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 30,
-  },
   floatingActions: {
     flexDirection: 'row',
     gap: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
+    marginBottom: spacing.lg,
   },
   statusBar: {
     position: 'absolute',
-    top: 56,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -356,7 +377,6 @@ const styles = StyleSheet.create({
   recenterBtn: {
     position: 'absolute',
     right: 16,
-    top: 120,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -372,6 +392,20 @@ const styles = StyleSheet.create({
   recenterIcon: {
     fontSize: 22,
     color: colors.onSurface,
+  },
+  grabber: {
+    backgroundColor: colors.outlineVariant,
+    width: 40,
+  },
+  sheetBackground: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  sheetContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   rideCard: {
     flex: 1,
@@ -409,21 +443,6 @@ const styles = StyleSheet.create({
     ...typography.titleMd,
     color: colors.onPrimaryContainer,
   },
-  bottomSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 25,
-    elevation: 16,
-  },
-  sheetContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: 4,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-  },
   greeting: {
     ...typography.headlineLgMobile,
     color: colors.onBackground,
@@ -442,8 +461,6 @@ const styles = StyleSheet.create({
   seeAll: {
     ...typography.labelLg,
     color: colors.primary,
-  },
-  activityList: {
   },
   emptyText: {
     ...typography.bodyMd,

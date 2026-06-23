@@ -136,7 +136,7 @@ export default function RegisterScreen({ navigation }) {
 
             <View style={styles.infoBox}>
               <Text style={styles.infoIcon}>ℹ️</Text>
-              <Text style={styles.infoText}>Your registration will be reviewed by our team. This usually takes 24-48 hours. You'll be notified once verified.</Text>
+              <Text style={styles.infoText}>Your registration will be reviewed by our team. This usually takes 24-48 hours. You will be notified once verified.</Text>
             </View>
 
             <View style={styles.btnRow}>

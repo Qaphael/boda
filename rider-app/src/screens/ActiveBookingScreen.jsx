@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import * as NavigationBar from 'expo-navigation-bar';
 import { io } from 'socket.io-client';
 import { bookingAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +12,7 @@ import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 function buildTripMapHTML(pickup, dropoff) {
   const pLat = pickup?.lat || 2.77;
@@ -56,7 +60,7 @@ function buildTripMapHTML(pickup, dropoff) {
         if(d.code==='Ok'&&d.routes.length>0){
           var coords=pl.decode(d.routes[0].geometry);
           L.polyline(coords,{color:'#6d5e00',weight:5,opacity:0.9}).addTo(map);
-          map.fitBounds(L.polyline(coords).getBounds(),{padding:[40,40]});
+          map.fitBounds(L.polyline(coords).getBounds(),{paddingBottomRight: L.point(40, 200)});
         }
       }).catch(function(){});
   </script>
@@ -67,15 +71,31 @@ function buildTripMapHTML(pickup, dropoff) {
 export default function ActiveBookingScreen({ route, navigation }) {
   const { booking } = route.params || {};
   const { rider } = useAuth();
+  const insets = useSafeAreaInsets();
   const [tripPhase, setTripPhase] = useState('pickup');
   const [loading, setLoading] = useState(false);
   const socketRef = useRef(null);
   const webViewRef = useRef(null);
+  const sheetRef = useRef(null);
+  const snapPoints = useMemo(() => ['35%', '70%'], []);
   const { showModal, ModalComponent } = useModal();
+
+  const handleSheetChange = useCallback((index) => {
+    const snapPercents = [0.35, 0.70];
+    const sheetHeight = SCREEN_HEIGHT * (snapPercents[index] ?? 0.35);
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        map.invalidateSize();
+        map.panBy([0, -${Math.round(sheetHeight / 4)}], { animate: false });
+        true;
+      `);
+    }
+  }, []);
 
   useLocationTracking(rider?.riderId, booking?.id);
 
   useEffect(() => {
+    try { NavigationBar.setStyle('dark'); } catch (e) {}
     const socket = io(SOCKET_URL, {
       transports: ['websocket'],
       auth: { token: rider?.token },
@@ -85,7 +105,7 @@ export default function ActiveBookingScreen({ route, navigation }) {
     socket.on('rider:moved', (data) => {
       if (webViewRef.current) {
         webViewRef.current.injectJavaScript(
-          `window.updateRiderPosition(${data.lat}, ${data.lng});`
+          `window.updateRiderPosition(${data.lat}, ${data.lng}); true;`
         );
       }
     });
@@ -145,13 +165,13 @@ export default function ActiveBookingScreen({ route, navigation }) {
           originWhitelist={['*']}
           javaScriptEnabled
         />
-        <View style={styles.statusPill}>
+        <View style={[styles.statusPill, { top: insets.top + 8 }]}>
           <View style={styles.statusDot} />
           <Text style={styles.statusPillText}>{tripPhase === 'pickup' ? 'Heading to Pickup' : 'Trip in Progress'}</Text>
         </View>
       </View>
 
-      <View style={styles.customerCard}>
+      <View style={[styles.customerCard, { top: insets.top + 56 }]}>
         <View style={styles.customerAvatar}>
           <Text style={styles.customerAvatarText}>{booking?.customer_name?.[0] || 'C'}</Text>
         </View>
@@ -169,8 +189,19 @@ export default function ActiveBookingScreen({ route, navigation }) {
         </View>
       </View>
 
-      <View style={styles.bottomSheet}>
-        <View style={styles.grabber}><View style={styles.grabberBar} /></View>
+      {/* BOTTOM SHEET — @gorhom/bottom-sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={handleSheetChange}
+        handleIndicatorStyle={styles.grabber}
+        backgroundStyle={styles.sheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent}>
 
         <View style={styles.progressSection}>
           <View style={styles.progressBar}>
@@ -215,7 +246,8 @@ export default function ActiveBookingScreen({ route, navigation }) {
             <Text style={styles.cancelBtnText}>Cancel Trip</Text>
           </TouchableOpacity>
         </View>
-      </View>
+        </BottomSheetScrollView>
+      </BottomSheet>
       <ModalComponent />
     </View>
   );
@@ -224,10 +256,10 @@ export default function ActiveBookingScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   mapCanvas: { flex: 1, position: 'relative' },
-  statusPill: { position: 'absolute', top: 56, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.primaryContainer}ee`, paddingHorizontal: 20, paddingVertical: 10, borderRadius: radius.full, zIndex: 10 },
+  statusPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.primaryContainer}ee`, paddingHorizontal: 20, paddingVertical: 10, borderRadius: radius.full, zIndex: 10 },
   statusDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, marginRight: 8 },
   statusPillText: { ...typography.titleMd, color: colors.onPrimaryContainer },
-  customerCard: { position: 'absolute', top: 110, left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.surface}ee`, borderRadius: radius.xl, padding: spacing.md, zIndex: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  customerCard: { position: 'absolute', left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.surface}ee`, borderRadius: radius.xl, padding: spacing.md, zIndex: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   customerAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primaryContainer, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
   customerAvatarText: { ...typography.titleMd, color: colors.onPrimaryContainer },
   customerInfo: { flex: 1 },
@@ -237,10 +269,9 @@ const styles = StyleSheet.create({
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryContainer, alignItems: 'center', justifyContent: 'center' },
   chatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.secondaryContainer, alignItems: 'center', justifyContent: 'center' },
   contactIcon: { fontSize: 18 },
-  bottomSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 16, zIndex: 20, paddingBottom: 32 },
-  grabber: { alignItems: 'center', paddingVertical: spacing.md },
-  grabberBar: { width: 40, height: 4, backgroundColor: colors.surfaceContainerHighest, borderRadius: 2 },
-  progressSection: { paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
+  grabber: { backgroundColor: colors.outlineVariant, width: 40 },
+  sheetBackground: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: 32 },
   progressBar: { height: 6, backgroundColor: colors.surfaceContainerHigh, borderRadius: 3, marginBottom: spacing.sm },
   progressFill: { height: 6, backgroundColor: colors.primary, borderRadius: 3 },
   progressSteps: { flexDirection: 'row', justifyContent: 'space-between' },

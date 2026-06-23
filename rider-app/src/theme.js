@@ -57,16 +57,16 @@ export const colors = {
 };
 
 export const typography = {
-  displayLg: { fontFamily: 'Outfit', fontSize: 48, fontWeight: '700', lineHeight: 56, letterSpacing: -0.02 },
-  headlineLg: { fontFamily: 'Outfit', fontSize: 32, fontWeight: '700', lineHeight: 40, letterSpacing: -0.01 },
-  headlineMd: { fontFamily: 'Outfit', fontSize: 24, fontWeight: '600', lineHeight: 32 },
-  headlineLgMobile: { fontFamily: 'Outfit', fontSize: 28, fontWeight: '700', lineHeight: 36 },
-  titleLg: { fontFamily: 'Outfit', fontSize: 20, fontWeight: '600', lineHeight: 28 },
-  titleMd: { fontFamily: 'Outfit', fontSize: 18, fontWeight: '600', lineHeight: 24 },
-  bodyLg: { fontFamily: 'Outfit', fontSize: 18, fontWeight: '400', lineHeight: 28 },
-  bodyMd: { fontFamily: 'Outfit', fontSize: 16, fontWeight: '400', lineHeight: 24 },
-  labelLg: { fontFamily: 'Outfit', fontSize: 14, fontWeight: '600', lineHeight: 20, letterSpacing: 0.02 },
-  labelSm: { fontFamily: 'Outfit', fontSize: 12, fontWeight: '500', lineHeight: 16, letterSpacing: 0.04 },
+  displayLg: { fontFamily: 'Outfit', fontSize: 48, fontWeight: '700', lineHeight: 56, letterSpacing: -0.02, maxFontSizeMultiplier: 1.2 },
+  headlineLg: { fontFamily: 'Outfit', fontSize: 32, fontWeight: '700', lineHeight: 40, letterSpacing: -0.01, maxFontSizeMultiplier: 1.2 },
+  headlineMd: { fontFamily: 'Outfit', fontSize: 24, fontWeight: '600', lineHeight: 32, maxFontSizeMultiplier: 1.3 },
+  headlineLgMobile: { fontFamily: 'Outfit', fontSize: 28, fontWeight: '700', lineHeight: 36, maxFontSizeMultiplier: 1.2 },
+  titleLg: { fontFamily: 'Outfit', fontSize: 20, fontWeight: '600', lineHeight: 28, maxFontSizeMultiplier: 1.3 },
+  titleMd: { fontFamily: 'Outfit', fontSize: 18, fontWeight: '600', lineHeight: 24, maxFontSizeMultiplier: 1.3 },
+  bodyLg: { fontFamily: 'Outfit', fontSize: 18, fontWeight: '400', lineHeight: 28, maxFontSizeMultiplier: 1.4 },
+  bodyMd: { fontFamily: 'Outfit', fontSize: 16, fontWeight: '400', lineHeight: 24, maxFontSizeMultiplier: 1.4 },
+  labelLg: { fontFamily: 'Outfit', fontSize: 14, fontWeight: '600', lineHeight: 20, letterSpacing: 0.02, maxFontSizeMultiplier: 1.2 },
+  labelSm: { fontFamily: 'Outfit', fontSize: 12, fontWeight: '500', lineHeight: 16, letterSpacing: 0.04, maxFontSizeMultiplier: 1.2 },
 };
 
 export const spacing = {

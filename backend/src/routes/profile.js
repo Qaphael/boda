@@ -102,7 +102,7 @@ const updateCustomerProfile = async (req, reply) => {
 const getSavedPlaces = async (req, reply) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM saved_places WHERE user_id = $1 ORDER BY sort_order ASC, created_at ASC',
+      'SELECT * FROM saved_places WHERE user_id = $1 AND is_deleted = false ORDER BY sort_order ASC, created_at ASC',
       [req.user.userId]
     );
     return reply.send({ places: result.rows });
@@ -153,7 +153,7 @@ const deleteSavedPlace = async (req, reply) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'DELETE FROM saved_places WHERE id = $1 AND user_id = $2 RETURNING id',
+      'UPDATE saved_places SET is_deleted = true WHERE id = $1 AND user_id = $2 AND is_deleted = false RETURNING id',
       [id, req.user.userId]
     );
     if (result.rows.length === 0) {
@@ -169,7 +169,7 @@ const deleteSavedPlace = async (req, reply) => {
 const getPaymentMethods = async (req, reply) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM payment_methods WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC',
+      'SELECT * FROM payment_methods WHERE user_id = $1 AND is_deleted = false ORDER BY is_default DESC, created_at DESC',
       [req.user.userId]
     );
     return reply.send({ methods: result.rows });
@@ -190,7 +190,7 @@ const addPaymentMethod = async (req, reply) => {
     }
 
     const existing = await pool.query(
-      'SELECT id FROM payment_methods WHERE user_id = $1 AND phone_number = $2',
+      'SELECT id FROM payment_methods WHERE user_id = $1 AND phone_number = $2 AND is_deleted = false',
       [req.user.userId, phone_number]
     );
     if (existing.rows.length > 0) {
@@ -198,7 +198,7 @@ const addPaymentMethod = async (req, reply) => {
     }
 
     const hasMethods = await pool.query(
-      'SELECT id FROM payment_methods WHERE user_id = $1 LIMIT 1',
+      'SELECT id FROM payment_methods WHERE user_id = $1 AND is_deleted = false LIMIT 1',
       [req.user.userId]
     );
 
@@ -218,11 +218,11 @@ const setDefaultPayment = async (req, reply) => {
   try {
     const { id } = req.params;
     await pool.query(
-      'UPDATE payment_methods SET is_default = false WHERE user_id = $1',
+      'UPDATE payment_methods SET is_default = false WHERE user_id = $1 AND is_deleted = false',
       [req.user.userId]
     );
     const result = await pool.query(
-      'UPDATE payment_methods SET is_default = true WHERE id = $1 AND user_id = $2 RETURNING *',
+      'UPDATE payment_methods SET is_default = true WHERE id = $1 AND user_id = $2 AND is_deleted = false RETURNING *',
       [id, req.user.userId]
     );
     if (result.rows.length === 0) {
@@ -239,7 +239,7 @@ const deletePaymentMethod = async (req, reply) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'DELETE FROM payment_methods WHERE id = $1 AND user_id = $2 RETURNING id, is_default',
+      'UPDATE payment_methods SET is_deleted = true WHERE id = $1 AND user_id = $2 AND is_deleted = false RETURNING id, is_default',
       [id, req.user.userId]
     );
     if (result.rows.length === 0) {
@@ -247,7 +247,7 @@ const deletePaymentMethod = async (req, reply) => {
     }
     if (result.rows[0].is_default) {
       const first = await pool.query(
-        'SELECT id FROM payment_methods WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1',
+        'SELECT id FROM payment_methods WHERE user_id = $1 AND is_deleted = false ORDER BY created_at ASC LIMIT 1',
         [req.user.userId]
       );
       if (first.rows.length > 0) {
@@ -333,7 +333,7 @@ const applyReferral = async (req, reply) => {
 const getEmergencyContacts = async (req, reply) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM emergency_contacts WHERE user_id = $1 ORDER BY created_at ASC',
+      'SELECT * FROM emergency_contacts WHERE user_id = $1 AND is_deleted = false ORDER BY created_at ASC',
       [req.user.userId]
     );
     return reply.send({ contacts: result.rows });
@@ -371,7 +371,7 @@ const deleteEmergencyContact = async (req, reply) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'DELETE FROM emergency_contacts WHERE id = $1 AND user_id = $2 RETURNING id',
+      'UPDATE emergency_contacts SET is_deleted = true WHERE id = $1 AND user_id = $2 AND is_deleted = false RETURNING id',
       [id, req.user.userId]
     );
     if (result.rows.length === 0) {

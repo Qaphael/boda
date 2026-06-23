@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { adminAPI } from '../services/api';
+import { useAlert } from '../components/AlertModal';
 
 const statusConfig = {
   verified: { label: 'Active', class: 'bg-secondary-container text-on-secondary-container' },
@@ -11,6 +12,7 @@ const statusConfig = {
 const avatarColors = ['bg-primary/10 text-primary', 'bg-tertiary-fixed-dim text-on-tertiary-fixed-variant', 'bg-outline-variant text-on-surface-variant'];
 
 export default function Riders() {
+  const { showAlert } = useAlert();
   const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRider, setSelectedRider] = useState(null);
@@ -53,7 +55,7 @@ export default function Riders() {
       setSelectedRider(null);
       setFilter('all');
     } catch (err) {
-      alert('Failed to verify rider');
+      showAlert({ title: 'Error', message: 'Failed to verify rider', type: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -68,7 +70,7 @@ export default function Riders() {
       setRejectReason('');
       setFilter('all');
     } catch (err) {
-      alert('Failed to reject rider');
+      showAlert({ title: 'Error', message: 'Failed to reject rider', type: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -82,7 +84,7 @@ export default function Riders() {
       setMenuOpen(null);
       setFilter('all');
     } catch (err) {
-      alert('Failed to suspend rider');
+      showAlert({ title: 'Error', message: 'Failed to suspend rider', type: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -96,24 +98,32 @@ export default function Riders() {
       setMenuOpen(null);
       setFilter('all');
     } catch (err) {
-      alert('Failed to reinstate rider');
+      showAlert({ title: 'Error', message: 'Failed to reinstate rider', type: 'error' });
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleDelete = async (riderId, riderName) => {
-    if (!confirm(`Delete ${riderName}? This cannot be undone.`)) return;
-    setActionLoading(true);
-    try {
-      await adminAPI.deleteRider(riderId);
-      setRiders(riders.filter(r => r.id !== riderId));
-      setMenuOpen(null);
-    } catch (err) {
-      alert('Failed to delete rider');
-    } finally {
-      setActionLoading(false);
-    }
+    showAlert({
+      title: 'Delete Rider',
+      message: `Delete ${riderName}? This cannot be undone.`,
+      type: 'error',
+      showCancel: true,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await adminAPI.deleteRider(riderId);
+          setRiders(riders.filter(r => r.id !== riderId));
+          setMenuOpen(null);
+        } catch (err) {
+          showAlert({ title: 'Error', message: 'Failed to delete rider', type: 'error' });
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
   useEffect(() => {

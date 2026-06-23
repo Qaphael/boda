@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { adminAPI } from '../services/api';
+import { useAlert } from '../components/AlertModal';
 
 export default function Settings() {
+  const { showAlert } = useAlert();
   const [activeSection, setActiveSection] = useState('Profile');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -30,9 +32,9 @@ export default function Settings() {
     setSaving(true);
     try {
       await adminAPI.updateProfile(profile);
-      alert('Profile updated');
+      showAlert({ title: 'Success', message: 'Profile updated', type: 'success' });
     } catch (err) {
-      alert('Failed to update profile');
+      showAlert({ title: 'Error', message: 'Failed to update profile', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -42,9 +44,9 @@ export default function Settings() {
     setSaving(true);
     try {
       await adminAPI.updateSettings(settings);
-      alert('Settings saved');
+      showAlert({ title: 'Success', message: 'Settings saved', type: 'success' });
     } catch (err) {
-      alert('Failed to save settings');
+      showAlert({ title: 'Error', message: 'Failed to save settings', type: 'error' });
     } finally {
       setSaving(false);
     }

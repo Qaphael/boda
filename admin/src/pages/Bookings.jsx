@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { adminAPI } from '../services/api';
+import { useAlert } from '../components/AlertModal';
 
 const statusConfig = {
   pending: { label: 'Pending', class: 'bg-surface-container-highest text-on-surface-variant border border-outline-variant' },
@@ -10,6 +11,7 @@ const statusConfig = {
 };
 
 export default function Bookings() {
+  const { showAlert } = useAlert();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState(null);
@@ -71,24 +73,32 @@ export default function Bookings() {
 
   const handleCancelBooking = async () => {
     if (!selectedBooking?.booking) return;
-    if (!confirm('Cancel this booking?')) return;
-    setActionLoading(true);
-    try {
-      await adminAPI.cancelBooking(selectedBooking.booking.id, 'Admin cancellation');
-      setSelectedBooking(null);
-      loadBookings();
-    } catch (err) {
-      alert('Failed to cancel booking');
-    } finally {
-      setActionLoading(false);
-    }
+    showAlert({
+      title: 'Cancel Booking',
+      message: 'Are you sure you want to cancel this booking?',
+      type: 'error',
+      showCancel: true,
+      confirmText: 'Yes, Cancel',
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await adminAPI.cancelBooking(selectedBooking.booking.id, 'Admin cancellation');
+          setSelectedBooking(null);
+          loadBookings();
+        } catch (err) {
+          showAlert({ title: 'Error', message: 'Failed to cancel booking', type: 'error' });
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
   const handleContactRider = () => {
     if (selectedBooking?.booking?.rider_phone) {
       setShowContactModal(true);
     } else {
-      alert('No rider assigned to this booking');
+      showAlert({ title: 'No Rider', message: 'No rider assigned to this booking', type: 'info' });
     }
   };
 

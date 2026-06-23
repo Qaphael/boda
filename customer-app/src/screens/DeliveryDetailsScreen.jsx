@@ -1,21 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useModal } from '../components/useModal';
 import * as Location from 'expo-location';
 import { bookingAPI, riderAPI, profileAPI } from '../services/api';
-import Grabber from '../components/Grabber';
 import { colors, typography, spacing, radius } from '../theme';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const PACKAGE_SIZES = [
   { id: 'small', label: 'Small', desc: 'Envelope', icon: '✉️' },
@@ -128,7 +130,7 @@ function buildDeliveryMapHTML(pickup) {
             document.getElementById('route-time').textContent = durationMin + ' min';
             document.getElementById('route-fare').textContent = 'UGX ' + Math.ceil(1500 + route.distance / 1000 * 700).toLocaleString();
             document.getElementById('route-info').style.display = 'flex';
-            map.fitBounds(routePolyline.getBounds(), { padding: [40, 40] });
+            map.fitBounds(routePolyline.getBounds(), { paddingBottomRight: L.point(40, 200) });
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'route', distance: route.distance, duration: route.duration }));
           }
         })
@@ -155,7 +157,10 @@ function buildDeliveryMapHTML(pickup) {
 
 export default function DeliveryDetailsScreen({ route, navigation }) {
   const { showModal, ModalComponent } = useModal();
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
+  const sheetRef = useRef(null);
+  const snapPoints = useMemo(() => ['60%', '90%'], []);
   const [pickupCoords, setPickupCoords] = useState(null);
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffCoords, setDropoffCoords] = useState(null);
@@ -176,7 +181,20 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
   const [roadDistanceM, setRoadDistanceM] = useState(0);
   const searchTimeout = useRef(null);
 
+  const handleSheetChange = useCallback((index) => {
+    const snapPercents = [0.60, 0.90];
+    const sheetHeight = SCREEN_HEIGHT * (snapPercents[index] ?? 0.60);
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        map.invalidateSize();
+        map.panBy([0, -${Math.round(sheetHeight / 4)}], { animate: false });
+        true;
+      `);
+    }
+  }, []);
+
   useEffect(() => {
+    try { NavigationBar.setStyle('dark'); } catch (e) {}
     getCurrentLocation();
     profileAPI.getSavedPlaces()
       .then(({ data }) => setSavedPlaces(data.places || []))
@@ -251,7 +269,7 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
     setShowResults(false);
     setSearchFocused(false);
     if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`window.updateDropoff(${coords.lat}, ${coords.lng});`);
+      webViewRef.current.injectJavaScript(`window.updateDropoff(${coords.lat}, ${coords.lng}); true;`);
     }
   };
 
@@ -262,7 +280,7 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
     setShowResults(false);
     setSearchFocused(false);
     if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`window.updateDropoff(${coords.lat}, ${coords.lng});`);
+      webViewRef.current.injectJavaScript(`window.updateDropoff(${coords.lat}, ${coords.lng}); true;`);
     }
   };
 
@@ -315,34 +333,40 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
-      <View style={styles.container}>
-        <View style={styles.mapContainer}>
-          <WebView
-            ref={webViewRef}
-            source={{ html: buildDeliveryMapHTML(pickupCoords) }}
-            style={styles.map}
-            originWhitelist={['*']}
-            javaScriptEnabled={true}
-            onMessage={(event) => {
-              try {
-                const msg = JSON.parse(event.nativeEvent.data);
-                if (msg.type === 'route') setRoadDistanceM(msg.distance);
-              } catch (e) {}
-            }}
-          />
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-            <Text style={styles.backIcon}>←</Text>
-          </TouchableOpacity>
-        </View>
+    <View style={styles.container}>
+      {/* MAP — full screen */}
+      <View style={styles.mapContainer}>
+        <WebView
+          ref={webViewRef}
+          source={{ html: buildDeliveryMapHTML(pickupCoords) }}
+          style={StyleSheet.absoluteFill}
+          originWhitelist={['*']}
+          javaScriptEnabled={true}
+          onMessage={(event) => {
+            try {
+              const msg = JSON.parse(event.nativeEvent.data);
+              if (msg.type === 'route') setRoadDistanceM(msg.distance);
+            } catch (e) {}
+          }}
+        />
+        <TouchableOpacity style={[styles.backButton, { top: insets.top + 8 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+      </View>
 
-        <View style={[styles.bottomSheet, searchFocused && styles.bottomSheetExpanded]}>
-          <Grabber />
-          <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      {/* BOTTOM SHEET — @gorhom/bottom-sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={handleSheetChange}
+        handleIndicatorStyle={styles.grabber}
+        backgroundStyle={styles.sheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.addressSection}>
               <View style={styles.addressCard}>
                 <View style={styles.dashedLine} />
@@ -361,7 +385,7 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
                   <View style={styles.dropoffDot} />
                   <View style={[styles.addressInputWrapper, styles.dropoffInput]}>
                     <Text style={styles.addressLabel}>Dropoff</Text>
-                    <TextInput
+                    <BottomSheetTextInput
                       style={styles.addressTextInput}
                       value={dropoffAddress}
                       onChangeText={searchLocations}
@@ -433,7 +457,7 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
             <View style={styles.recipientCard}>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Name</Text>
-                <TextInput
+                <BottomSheetTextInput
                   style={styles.input}
                   value={recipientName}
                   onChangeText={setRecipientName}
@@ -447,7 +471,7 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
                   <View style={styles.phonePrefix}>
                     <Text style={styles.phonePrefixText}>+256</Text>
                   </View>
-                  <TextInput
+                  <BottomSheetTextInput
                     style={[styles.input, styles.phoneInput]}
                     value={recipientPhone}
                     onChangeText={setRecipientPhone}
@@ -493,7 +517,7 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
                 {paymentMethods.length > 1 && <Text style={styles.momoChevron}>↻</Text>}
               </TouchableOpacity>
             )}
-          </ScrollView>
+          </BottomSheetScrollView>
 
           <View style={styles.confirmWrapper}>
             <TouchableOpacity
@@ -509,10 +533,9 @@ export default function DeliveryDetailsScreen({ route, navigation }) {
               )}
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+      </BottomSheet>
       <ModalComponent />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -521,19 +544,14 @@ const styles = StyleSheet.create({
   mapContainer: { flex: 1, position: 'relative' },
   map: { ...StyleSheet.absoluteFillObject },
   backButton: {
-    position: 'absolute', top: 56, left: spacing.lg,
+    position: 'absolute', left: spacing.lg,
     width: 48, height: 48, borderRadius: 24,
     backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4, zIndex: 10,
   },
   backIcon: { fontSize: 20, color: colors.onSurface },
-  bottomSheet: {
-    flex: 1, backgroundColor: colors.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 16,
-    overflow: 'hidden',
-  },
-  bottomSheetExpanded: { flex: 3 },
+  grabber: { backgroundColor: colors.outlineVariant, width: 40 },
+  sheetBackground: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   sheetScroll: { paddingHorizontal: spacing.lg, flex: 1 },
   addressSection: { marginBottom: spacing.xl },
   addressCard: { backgroundColor: colors.surfaceContainerLow, borderRadius: radius.xl, padding: spacing.md, position: 'relative' },

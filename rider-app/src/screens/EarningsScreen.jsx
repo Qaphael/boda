@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { riderAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -13,6 +14,7 @@ const PERIODS = [
 ];
 
 export default function EarningsScreen({ navigation, route }) {
+  const insets = useSafeAreaInsets();
   const { rider } = useAuth();
   const [earnings, setEarnings] = useState(null);
   const [bookings, setBookings] = useState([]);
@@ -46,7 +48,7 @@ export default function EarningsScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         {canGoBack ? (
           <TouchableOpacity style={styles.menuBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
             <Text style={styles.menuIcon}>←</Text>
@@ -115,7 +117,7 @@ export default function EarningsScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerHigh, alignItems: 'center', justifyContent: 'center' },
   menuIcon: { fontSize: 18, color: colors.onSurface },
   topTitle: { ...typography.titleLg, color: colors.onSurface, fontWeight: '700' },

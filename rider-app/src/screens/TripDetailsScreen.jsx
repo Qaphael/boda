@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
@@ -44,11 +45,11 @@ function buildRouteMapHTML(pickup, dropoff) {
       if(d.code==='Ok'&&d.routes.length>0){
         var coords=polyline.decode(d.routes[0].geometry);
         L.polyline(coords,{color:'#6d5e00',weight:5,opacity:0.9}).addTo(map);
-        map.fitBounds(L.polyline(coords).getBounds(),{padding:[60,60]});
+          map.fitBounds(L.polyline(coords).getBounds(),{paddingBottomRight: L.point(60, 200)});
       }
     }).catch(function(){
       L.polyline([[${pLat},${pLng}],[${dLat},${dLng}]],{color:'#6d5e00',weight:4,dashArray:'8,8'}).addTo(map);
-      map.fitBounds([[${pLat},${pLng}],[${dLat},${dLng}]],{padding:[60,60]});
+      map.fitBounds([[${pLat},${pLng}],[${dLat},${dLng}]],{paddingBottomRight: L.point(60, 200)});
     });
   </script>
 </body>
@@ -58,6 +59,7 @@ function buildRouteMapHTML(pickup, dropoff) {
 export default function TripDetailsScreen({ route, navigation }) {
   const { booking } = route.params || {};
   const { showModal, ModalComponent } = useModal();
+  const insets = useSafeAreaInsets();
 
   const fare = booking?.fare_final || booking?.fare_estimate || 0;
   const distance = booking?.distance_km ? `${booking.distance_km} km` : '--';
@@ -78,7 +80,7 @@ export default function TripDetailsScreen({ route, navigation }) {
             style={styles.map}
             originWhitelist={['*']}
           />
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate('Main')} activeOpacity={0.7}>
+          <TouchableOpacity style={[styles.backBtn, { top: insets.top + 8 }]} onPress={() => navigation.navigate('Main')} activeOpacity={0.7}>
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
         </View>
@@ -147,7 +149,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   mapContainer: { height: 300, position: 'relative' },
   map: { ...StyleSheet.absoluteFillObject },
-  backBtn: { position: 'absolute', top: 56, left: spacing.lg, width: 48, height: 48, borderRadius: 24, backgroundColor: `${colors.surface}ee`, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
+  backBtn: { position: 'absolute', left: spacing.lg, width: 48, height: 48, borderRadius: 24, backgroundColor: `${colors.surface}ee`, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   backIcon: { fontSize: 20, color: colors.onSurface },
   tripCard: { marginHorizontal: spacing.lg, marginTop: -40, backgroundColor: colors.surfaceContainerLowest, borderRadius: 24, padding: spacing.xl, borderWidth: 1, borderColor: colors.outlineVariant, zIndex: 10 },
   tripBadge: { backgroundColor: colors.inverseSurface, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: radius.full, marginBottom: spacing.md },

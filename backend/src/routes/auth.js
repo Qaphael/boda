@@ -80,7 +80,7 @@ const verifyOTP = async (req, reply) => {
     if (storedOTP !== otp) {
       await redis.incr(verifyRateKey);
       await redis.expire(verifyRateKey, OTP_EXPIRY);
-      return reply.status(400).send({ error: 'Invalid OTP' });
+      return reply.status(400).send({ error: 'Invalid or expired OTP' });
     }
 
     await redis.del(`otp:${phone}`);

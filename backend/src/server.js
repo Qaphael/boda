@@ -37,7 +37,7 @@ const start = async () => {
     const subClient = redis.duplicate();
     await Promise.all([pubClient.connect(), subClient.connect()]);
 
-    const io = new Server(fastify.server, { cors: { origin: '*' } });
+    const io = new Server(fastify.server, { cors: { origin: ['https://admin.ocaya.space', 'http://localhost:5173'] } });
     io.adapter(createAdapter(pubClient, subClient));
 
     io.use((socket, next) => {

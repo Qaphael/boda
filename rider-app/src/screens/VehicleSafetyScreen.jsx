@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { riderAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -15,15 +17,14 @@ const CHECKLIST = [
 ];
 
 export default function VehicleSafetyScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { rider } = useAuth();
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checked, setChecked] = useState({});
   const { showModal, ModalComponent } = useModal();
 
-  useEffect(() => {
-    loadVehicle();
-  }, []);
+  useFocusEffect(useCallback(() => { loadVehicle(); }, []));
 
   const loadVehicle = async () => {
     try {
@@ -52,7 +53,7 @@ export default function VehicleSafetyScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
@@ -127,7 +128,7 @@ export default function VehicleSafetyScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerHigh, alignItems: 'center', justifyContent: 'center' },
   backIcon: { fontSize: 18, color: colors.onSurface },
   topTitle: { ...typography.titleLg, color: colors.onSurface, fontWeight: '700' },

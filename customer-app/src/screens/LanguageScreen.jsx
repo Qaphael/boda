@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useModal } from '../components/useModal';
 import { profileAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -24,7 +25,7 @@ export default function LanguageScreen({ navigation }) {
     finally { setRefreshing(false); }
   };
 
-  useEffect(() => { fetchSettings(); }, []);
+  useFocusEffect(useCallback(() => { fetchSettings(); }, []));
 
   const handleSelect = async (key) => {
     setSelected(key);

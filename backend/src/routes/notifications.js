@@ -67,7 +67,7 @@ const deleteNotification = async (req, reply) => {
   try {
     const { id } = req.params;
     const adminId = req.user.userId;
-    await pool.query('DELETE FROM notifications WHERE id = $1 AND admin_id = $2', [id, adminId]);
+    await pool.query('UPDATE notifications SET is_deleted = true WHERE id = $1 AND admin_id = $2 AND is_deleted = false', [id, adminId]);
     return reply.send({ success: true });
   } catch (err) {
     req.log.error(err);

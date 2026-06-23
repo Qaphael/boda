@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ticketAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
@@ -14,6 +16,7 @@ const CATEGORIES = [
 ];
 
 export default function SupportScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedFaq, setExpandedFaq] = useState(null);
@@ -23,7 +26,7 @@ export default function SupportScreen({ navigation }) {
   const [newCategory, setNewCategory] = useState('general');
   const { showModal, ModalComponent } = useModal();
 
-  useEffect(() => { loadTickets(); }, []);
+  useFocusEffect(useCallback(() => { loadTickets(); }, []));
 
   const loadTickets = async () => {
     try {
@@ -63,7 +66,7 @@ export default function SupportScreen({ navigation }) {
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>How can we help?</Text>
@@ -129,7 +132,7 @@ export default function SupportScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 56 },
+  container: { flex: 1, backgroundColor: colors.background },
   heroCard: { marginHorizontal: spacing.lg, backgroundColor: colors.primaryContainer, borderRadius: 24, padding: spacing.xl, marginBottom: spacing.xl },
   heroTitle: { ...typography.headlineMd, color: colors.onPrimaryContainer, marginBottom: spacing.md },
   sosBtn: { backgroundColor: colors.errorContainer, borderRadius: radius.xl, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },

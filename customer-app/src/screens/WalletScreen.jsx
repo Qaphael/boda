@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useModal } from '../components/useModal';
 import { profileAPI, bookingAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -13,6 +14,7 @@ const PAYMENT_COLORS = {
 };
 
 export default function WalletScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { showModal, ModalComponent } = useModal();
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -114,7 +116,7 @@ export default function WalletScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -219,7 +221,7 @@ export default function WalletScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 56 },
+  container: { flex: 1, backgroundColor: colors.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
   balanceCard: {
     marginHorizontal: spacing.lg,

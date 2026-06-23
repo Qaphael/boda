@@ -76,6 +76,7 @@ describe('Auth Routes', () => {
 
   describe('POST /auth/verify-otp', () => {
     it('should verify OTP and return tokens', async () => {
+      mockRedisGet.mockResolvedValueOnce(null);
       mockRedisGet.mockResolvedValueOnce('123456');
       mockRedisDel.mockResolvedValue(1);
       mockPool.query.mockResolvedValueOnce({
@@ -109,6 +110,7 @@ describe('Auth Routes', () => {
     });
 
     it('should return 400 for invalid OTP', async () => {
+      mockRedisGet.mockResolvedValueOnce(null);
       mockRedisGet.mockResolvedValueOnce('123456');
 
       const response = await app.inject({
@@ -119,10 +121,11 @@ describe('Auth Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload);
-      expect(body.error).toBe('Invalid OTP');
+      expect(body.error).toBe('Invalid or expired OTP');
     });
 
     it('should return 400 if no OTP found', async () => {
+      mockRedisGet.mockResolvedValueOnce(null);
       mockRedisGet.mockResolvedValueOnce(null);
 
       const response = await app.inject({
@@ -133,7 +136,7 @@ describe('Auth Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload);
-      expect(body.error).toContain('No OTP found');
+      expect(body.error).toBe('Invalid or expired OTP');
     });
   });
 
@@ -147,6 +150,12 @@ describe('Auth Routes', () => {
       );
 
       mockRedisGet.mockResolvedValueOnce(refreshToken);
+      mockPool.query.mockResolvedValueOnce({
+        rows: [{ id: 'user-1', phone: '256771234567' }],
+      });
+      mockPool.query.mockResolvedValueOnce({
+        rows: [],
+      });
 
       const response = await app.inject({
         method: 'POST',

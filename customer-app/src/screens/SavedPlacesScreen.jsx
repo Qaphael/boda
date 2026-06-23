@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { useFocusEffect } from '@react-navigation/native';
 import { useModal } from '../components/useModal';
 import { profileAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -92,7 +93,7 @@ export default function SavedPlacesScreen({ navigation }) {
     finally { setLoading(false); setRefreshing(false); }
   };
 
-  useEffect(() => { fetchPlaces(); }, []);
+  useFocusEffect(useCallback(() => { fetchPlaces(); }, []));
 
   const resetForm = () => {
     setLabel('');
@@ -137,7 +138,7 @@ export default function SavedPlacesScreen({ navigation }) {
     setSearchResults([]);
 
     if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`window.updatePin(${lat}, ${lng}, "${address.replace(/"/g, '\\"')}");`);
+      webViewRef.current.injectJavaScript(`window.updatePin(${lat}, ${lng}, "${address.replace(/"/g, '\\"')}"); true;`);
     }
   };
 

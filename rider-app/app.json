@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.ocaya.boda.rider",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#fde047",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -9,12 +9,14 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bookingAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
 
 const FILTERS = ['All', 'Rides', 'Deliveries'];
 
 export default function ActivityScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [bookings, setBookings] = useState([]);
   const [filter, setFilter] = useState('All');
   const [loading, setLoading] = useState(true);
@@ -69,7 +71,7 @@ export default function ActivityScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.headline}>Activity History</Text>
         <Text style={styles.subtitle}>View and manage your past trips</Text>
@@ -149,7 +151,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 56,
   },
   header: {
     paddingHorizontal: spacing.lg,

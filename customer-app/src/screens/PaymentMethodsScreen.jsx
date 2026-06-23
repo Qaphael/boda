@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useModal } from '../components/useModal';
 import { profileAPI } from '../services/api';
 import { colors, typography, spacing, radius } from '../theme';
@@ -11,6 +13,7 @@ const METHODS = [
 ];
 
 export default function PaymentMethodsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { showModal, ModalComponent } = useModal();
   const [methods, setMethods] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +32,7 @@ export default function PaymentMethodsScreen({ navigation }) {
     }
   };
 
-  useEffect(() => { fetchMethods(); }, []);
+  useFocusEffect(useCallback(() => { fetchMethods(); }, []));
 
   const handleAdd = async () => {
     if (phoneNumber.length < 12) {
@@ -80,7 +83,7 @@ export default function PaymentMethodsScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>‹</Text>
@@ -176,7 +179,7 @@ export default function PaymentMethodsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 56 },
+  container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerLow, alignItems: 'center', justifyContent: 'center' },
   backText: { fontSize: 28, color: colors.onSurface, lineHeight: 30 },

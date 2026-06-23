@@ -1,21 +1,26 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  ScrollView,
   Linking,
+  Dimensions,
+  Platform,
+  ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useModal } from '../components/useModal';
 import { io } from 'socket.io-client';
 import { bookingAPI, riderAPI } from '../services/api';
-import Grabber from '../components/Grabber';
 import { colors, typography, spacing, radius } from '../theme';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 function buildTrackingMapHTML(pickup, dropoff, hasDropoff) {
   const pLat = pickup?.lat || 2.77;
@@ -125,7 +130,7 @@ function buildTrackingMapHTML(pickup, dropoff, hasDropoff) {
 
     window.fitAll = function() {
       if (${hasDropoff}) {
-        map.fitBounds([[${pLat}, ${pLng}], [${dLat}, ${dLng}]], { padding: [60, 60] });
+        map.fitBounds([[${pLat}, ${pLng}], [${dLat}, ${dLng}]], { paddingBottomRight: L.point(60, 200) });
       }
     };
 
@@ -141,7 +146,7 @@ function buildTrackingMapHTML(pickup, dropoff, hasDropoff) {
             var route = data.routes[0];
             routeCoords = pl.decode(route.geometry);
             routeLine = L.polyline(routeCoords, { color: '#6d5e00', weight: 5, opacity: 0.9 }).addTo(map);
-            map.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
+            map.fitBounds(routeLine.getBounds(), { paddingBottomRight: L.point(60, 200) });
 
             var distKm = (route.distance / 1000).toFixed(1);
             var durationMin = Math.ceil(route.duration / 60);
@@ -155,7 +160,7 @@ function buildTrackingMapHTML(pickup, dropoff, hasDropoff) {
         })
         .catch(function() {
           var line = L.polyline([[${pLat}, ${pLng}], [${dLat}, ${dLng}]], { color: '#6d5e00', weight: 4, dashArray: '8, 8' }).addTo(map);
-          map.fitBounds(line.getBounds(), { padding: [60, 60] });
+          map.fitBounds(line.getBounds(), { paddingBottomRight: L.point(60, 200) });
         });
     };
 
@@ -181,8 +186,11 @@ function buildTrackingMapHTML(pickup, dropoff, hasDropoff) {
 
 export default function TrackingScreen({ route, navigation }) {
   const { showModal, ModalComponent } = useModal();
+  const insets = useSafeAreaInsets();
   const { bookingId } = route.params;
   const webViewRef = useRef(null);
+  const sheetRef = useRef(null);
+  const snapPoints = useMemo(() => ['20%', '45%'], []);
   const [booking, setBooking] = useState(null);
   const [riderLocation, setRiderLocation] = useState(null);
   const [nearbyRiders, setNearbyRiders] = useState([]);
@@ -192,7 +200,20 @@ export default function TrackingScreen({ route, navigation }) {
   const [actionLoading, setActionLoading] = useState(false);
   const socketRef = useRef(null);
 
+  const handleSheetChange = useCallback((index) => {
+    const snapPercents = [0.20, 0.45];
+    const sheetHeight = SCREEN_HEIGHT * (snapPercents[index] ?? 0.20);
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        map.invalidateSize();
+        map.panBy([0, -${Math.round(sheetHeight / 4)}], { animate: false });
+        true;
+      `);
+    }
+  }, []);
+
   useEffect(() => {
+    try { NavigationBar.setStyle('dark'); } catch (e) {}
     loadBooking();
     setupSocket();
     return () => {
@@ -203,7 +224,7 @@ export default function TrackingScreen({ route, navigation }) {
   useEffect(() => {
     if (booking && !booking.rider_id && nearbyRiders.length > 0 && webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.updateRiders(${JSON.stringify(JSON.stringify(nearbyRiders))});`
+        `window.updateRiders(${JSON.stringify(JSON.stringify(nearbyRiders))}); true;`
       );
     }
   }, [nearbyRiders]);
@@ -211,7 +232,7 @@ export default function TrackingScreen({ route, navigation }) {
   useEffect(() => {
     if (riderLocation && webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.updateRider(${riderLocation.lat}, ${riderLocation.lng});`
+        `window.updateRider(${riderLocation.lat}, ${riderLocation.lng}); true;`
       );
     }
   }, [riderLocation]);
@@ -370,23 +391,33 @@ export default function TrackingScreen({ route, navigation }) {
             try {
               const msg = JSON.parse(event.nativeEvent.data);
               if (msg.type === 'route' && webViewRef.current) {
-                webViewRef.current.injectJavaScript('window.fitAll();');
+                webViewRef.current.injectJavaScript('window.fitAll(); true;');
               }
             } catch (e) {}
           }}
         />
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <TouchableOpacity style={[styles.backButton, { top: insets.top + 8 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        <View style={styles.statusPill}>
+        <View style={[styles.statusPill, { top: insets.top + 8 }]}>
           <View style={[styles.statusDot, booking.status === 'completed' && { backgroundColor: '#22c55e' }, booking.status === 'cancelled' && { backgroundColor: colors.error }]} />
           <Text style={styles.statusPillText}>{statusPillText()}</Text>
         </View>
       </View>
 
-      <View style={styles.bottomSheet}>
-        <Grabber />
-        <View style={styles.sheetContent}>
+      {/* BOTTOM SHEET — @gorhom/bottom-sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={handleSheetChange}
+        handleIndicatorStyle={styles.grabber}
+        backgroundStyle={styles.sheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView style={styles.sheetContent}>
           {/* PENDING — select rider */}
           {booking.status === 'pending' && !booking.rider_id && (
             <View style={{ flex: 1 }}>
@@ -396,7 +427,7 @@ export default function TrackingScreen({ route, navigation }) {
                     {nearbyRiders.length > 0 ? `${nearbyRiders.length} Riders Nearby` : 'Searching for riders...'}
                   </Text>
                   {nearbyRiders.length > 0 && (
-                    <ScrollView style={styles.ridersList} showsVerticalScrollIndicator={false}>
+                    <View style={styles.ridersList}>
                       {nearbyRiders.map((rider) => (
                         <TouchableOpacity key={rider.id} style={styles.riderCard} onPress={() => handleSelectRider(rider)} activeOpacity={0.7}>
                           <View style={styles.riderCardLeft}>
@@ -412,11 +443,11 @@ export default function TrackingScreen({ route, navigation }) {
                               </View>
                               {rider.plate_number && <Text style={styles.riderCardPlate}>{rider.plate_number}</Text>}
                             </View>
+                            <View style={styles.riderCardStatus}><View style={styles.riderCardOnlineDot} /></View>
                           </View>
-                          <View style={styles.riderCardStatus}><View style={styles.riderCardOnlineDot} /></View>
                         </TouchableOpacity>
                       ))}
-                    </ScrollView>
+                    </View>
                   )}
                   {nearbyRiders.length === 0 && (
                     <View style={styles.waitingContainer}>
@@ -629,8 +660,8 @@ export default function TrackingScreen({ route, navigation }) {
               </TouchableOpacity>
             </>
           )}
-        </View>
-      </View>
+        </BottomSheetScrollView>
+      </BottomSheet>
       <ModalComponent />
     </View>
   );
@@ -642,14 +673,14 @@ const styles = StyleSheet.create({
   mapContainer: { flex: 1, position: 'relative' },
   map: { ...StyleSheet.absoluteFillObject },
   backButton: {
-    position: 'absolute', top: 56, left: spacing.lg,
+    position: 'absolute', left: spacing.lg,
     width: 48, height: 48, borderRadius: 24,
     backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4, zIndex: 10,
   },
   backIcon: { fontSize: 20, color: colors.onSurface },
   statusPill: {
-    position: 'absolute', top: 56, alignSelf: 'center',
+    position: 'absolute', alignSelf: 'center',
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surface, paddingHorizontal: 20, paddingVertical: 8,
     borderRadius: radius.full, zIndex: 10,
@@ -657,12 +688,8 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginRight: 8 },
   statusPillText: { ...typography.titleMd, color: colors.onSurface },
-  bottomSheet: {
-    flex: 1, backgroundColor: colors.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 16,
-    overflow: 'hidden',
-  },
+  grabber: { backgroundColor: colors.outlineVariant, width: 40 },
+  sheetBackground: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, paddingTop: spacing.sm, flex: 1 },
   sectionTitle: { ...typography.titleMd, color: colors.onSurface, marginBottom: spacing.md },
   ridersList: { marginBottom: spacing.md },

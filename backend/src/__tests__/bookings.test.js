@@ -27,6 +27,11 @@ beforeAll(async () => {
           phone: decoded.phone,
           role: decoded.role,
         };
+        const riderResult = await mockPool.query('SELECT id, status FROM riders WHERE phone = $1 AND is_deleted = false', [decoded.phone]);
+        if (riderResult.rows.length > 0) {
+          req.user.riderId = riderResult.rows[0].id;
+          req.user.riderStatus = riderResult.rows[0].status;
+        }
       } catch (e) {}
     }
   });
@@ -50,6 +55,7 @@ describe('Booking Routes', () => {
   describe('POST /bookings', () => {
     it('should create a ride booking', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ phone: '256771234567' }] })
         .mockResolvedValueOnce({ rows: [{ id: 'payment-1' }] });
@@ -81,6 +87,7 @@ describe('Booking Routes', () => {
 
     it('should create a delivery booking', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ phone: '256771234567' }] })
         .mockResolvedValueOnce({ rows: [{ id: 'payment-1' }] })
@@ -148,9 +155,11 @@ describe('Booking Routes', () => {
     });
 
     it('should return 409 if customer has active booking', async () => {
-      mockPool.query.mockResolvedValueOnce({
-        rows: [{ id: 'active-booking' }],
-      });
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{ id: 'active-booking' }],
+        });
 
       const response = await app.inject({
         method: 'POST',
@@ -174,12 +183,14 @@ describe('Booking Routes', () => {
   describe('GET /bookings/:id', () => {
     it('should return booking details', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{
             id: 'booking-1',
             type: 'ride',
             status: 'pending',
             fare_estimate: 5000,
+            customer_id: 'customer-1',
           }],
         })
         .mockResolvedValueOnce({ rows: [] });
@@ -216,6 +227,7 @@ describe('Booking Routes', () => {
   describe('PATCH /bookings/:id/accept', () => {
     it('should accept a booking', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
         .mockResolvedValueOnce({
           rows: [{ id: 'rider-1', status: 'verified', is_online: true }],
         })
@@ -237,9 +249,11 @@ describe('Booking Routes', () => {
     });
 
     it('should return 403 if rider not verified', async () => {
-      mockPool.query.mockResolvedValueOnce({
-        rows: [{ id: 'rider-1', status: 'pending', is_online: false }],
-      });
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
+        .mockResolvedValueOnce({
+          rows: [{ id: 'rider-1', status: 'pending', is_online: false }],
+        });
 
       const response = await app.inject({
         method: 'PATCH',
@@ -254,6 +268,7 @@ describe('Booking Routes', () => {
 
     it('should return 409 if booking already accepted', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
         .mockResolvedValueOnce({
           rows: [{ id: 'rider-1', status: 'verified', is_online: true }],
         })
@@ -273,9 +288,11 @@ describe('Booking Routes', () => {
 
   describe('PATCH /bookings/:id/start', () => {
     it('should start a booking', async () => {
-      mockPool.query.mockResolvedValueOnce({
-        rows: [{ id: 'booking-1', status: 'in_progress' }],
-      });
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
+        .mockResolvedValueOnce({
+          rows: [{ id: 'booking-1', status: 'in_progress' }],
+        });
 
       const response = await app.inject({
         method: 'PATCH',
@@ -294,6 +311,7 @@ describe('Booking Routes', () => {
   describe('PATCH /bookings/:id/complete', () => {
     it('should complete a booking', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
         .mockResolvedValueOnce({
           rows: [{ id: 'booking-1', status: 'in_progress', fare_estimate: 5000 }],
         })
@@ -318,6 +336,7 @@ describe('Booking Routes', () => {
   describe('PATCH /bookings/:id/cancel', () => {
     it('should cancel a booking', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{ id: 'booking-1', status: 'pending', rider_id: null, customer_id: 'customer-1' }],
         })
@@ -338,9 +357,11 @@ describe('Booking Routes', () => {
     });
 
     it('should return 400 if cannot cancel', async () => {
-      mockPool.query.mockResolvedValueOnce({
-        rows: [{ id: 'booking-1', status: 'in_progress', rider_id: null, customer_id: 'customer-1' }],
-      });
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{ id: 'booking-1', status: 'in_progress', rider_id: null, customer_id: 'customer-1' }],
+        });
 
       const response = await app.inject({
         method: 'PATCH',
@@ -357,6 +378,7 @@ describe('Booking Routes', () => {
   describe('POST /bookings/:id/rate', () => {
     it('should rate a completed booking', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{ id: 'booking-1', rider_id: 'rider-1', status: 'completed' }],
         })
@@ -396,6 +418,7 @@ describe('Booking Routes', () => {
 
     it('should return 409 if already rated', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{ id: 'booking-1', rider_id: 'rider-1', status: 'completed' }],
         })

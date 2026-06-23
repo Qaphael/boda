@@ -15,6 +15,7 @@ export default {
     },
     android: {
       package: "com.ocaya.boda.customer",
+      softwareKeyboardLayoutMode: "resize",
       adaptiveIcon: {
         backgroundColor: "#fde047",
         foregroundImage: "./assets/android-icon-foreground.png",

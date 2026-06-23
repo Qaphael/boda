@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, ActivityIndicator, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
@@ -9,9 +12,11 @@ import { riderAPI, bookingAPI } from '../services/api';
 import { useLocationTracking } from '../hooks/useLocationTracking';
 import { colors, typography, spacing, radius } from '../theme';
 import { useModal } from '../components/useModal';
+import RecenterButton from '../components/RecenterButton';
 
 const SOCKET_URL = 'https://boda.ocaya.space';
 const GULU_CENTER = { lat: 2.7700, lng: 32.2900 };
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 function buildMapHTML(lat, lng) {
   return `<!DOCTYPE html>
@@ -68,7 +73,7 @@ function buildMapHTML(lat, lng) {
           L.polyline(coords,{color:'#6d5e00',weight:5,opacity:0.9}).addTo(map);
           L.circleMarker([pLat,pLng],{radius:8,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(map);
           L.circleMarker([dLat,dLng],{radius:8,fillColor:'#ba1a1a',color:'#fff',weight:3,fillOpacity:1}).addTo(map);
-          map.fitBounds(L.polyline(coords).getBounds(),{padding:[40,40]});
+          map.fitBounds(L.polyline(coords).getBounds(),{paddingBottomRight: L.point(40, 200)});
         }
       }).catch(function(){});
     };
@@ -83,7 +88,9 @@ function buildMapHTML(lat, lng) {
 
 export default function HomeScreen({ navigation }) {
   const { rider, logout, refreshProfile } = useAuth();
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
+  const sheetRef = useRef(null);
   const [isOnline, setIsOnline] = useState(false);
   const [profile, setProfile] = useState(null);
   const [earnings, setEarnings] = useState(null);
@@ -98,6 +105,23 @@ export default function HomeScreen({ navigation }) {
   const [loadingAction, setLoadingAction] = useState(false);
 
   const { showModal, ModalComponent } = useModal();
+
+  const snapPoints = useMemo(() => {
+    if (activeBooking || pendingBooking) return ['40%', '80%'];
+    return ['15%', '40%'];
+  }, [!!activeBooking, !!pendingBooking]);
+
+  const handleSheetChange = useCallback((index) => {
+    const snapPercents = activeBooking || pendingBooking ? [0.40, 0.80] : [0.15, 0.40];
+    const sheetHeight = SCREEN_HEIGHT * (snapPercents[index] ?? 0.15);
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        map.invalidateSize();
+        map.panBy([0, -${Math.round(sheetHeight / 4)}], { animate: false });
+        true;
+      `);
+    }
+  }, [!!activeBooking, !!pendingBooking]);
 
   useLocationTracking(rider?.riderId, activeBooking?.id);
 
@@ -117,7 +141,7 @@ export default function HomeScreen({ navigation }) {
           setPendingBooking(booking);
           if (webViewRef.current && booking.pickup_lat && booking.pickup_lng) {
             webViewRef.current.injectJavaScript(
-              `window.updateBookings(${JSON.stringify(JSON.stringify([booking]))});`
+              `window.updateBookings(${JSON.stringify(JSON.stringify([booking]))}); true;`
             );
           }
         }
@@ -137,7 +161,10 @@ export default function HomeScreen({ navigation }) {
     return () => socket.disconnect();
   }, [rider?.token, activeBooking]);
 
-  useEffect(() => { requestLocation(); }, []);
+  useEffect(() => {
+    try { NavigationBar.setStyle('dark'); } catch (e) {}
+    requestLocation();
+  }, []);
 
   useFocusEffect(useCallback(() => { loadAllData(); checkActiveBooking(); }, []));
 
@@ -150,7 +177,7 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     if (mapReady && location && webViewRef.current) {
-      webViewRef.current.injectJavaScript(`window.recenterMap(${location.lat}, ${location.lng});`);
+      webViewRef.current.injectJavaScript(`window.recenterMap(${location.lat}, ${location.lng}); true;`);
     }
   }, [mapReady, location]);
 
@@ -163,12 +190,12 @@ export default function HomeScreen({ navigation }) {
       if (tripPhase === 'enroute') {
         setTimeout(() => {
           webViewRef.current?.injectJavaScript(
-            `window.showRoute(${location?.lat || 2.77},${location?.lng || 32.29},${pLat},${pLng});`
+            `window.showRoute(${location?.lat || 2.77},${location?.lng || 32.29},${pLat},${pLng}); true;`
           );
         }, 500);
       } else if (tripPhase === 'trip') {
         setTimeout(() => {
-          webViewRef.current?.injectJavaScript(`window.showRoute(${pLat},${pLng},${dLat},${dLng});`);
+          webViewRef.current?.injectJavaScript(`window.showRoute(${pLat},${pLng},${dLat},${dLng}); true;`);
         }, 500);
       }
     }
@@ -185,7 +212,7 @@ export default function HomeScreen({ navigation }) {
 
   const recenter = () => {
     if (location && webViewRef.current) {
-      webViewRef.current.injectJavaScript(`window.recenterMap(${location.lat}, ${location.lng});`);
+      webViewRef.current.injectJavaScript(`window.recenterMap(${location.lat}, ${location.lng}); true;`);
     }
   };
 
@@ -336,7 +363,7 @@ export default function HomeScreen({ navigation }) {
           javaScriptEnabled
           onLoadEnd={() => setMapReady(true)}
         />
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { top: insets.top + 8 }]}>
           <View style={styles.appBadge}>
             <Text style={styles.appBadgeText}>Boda Rider</Text>
           </View>
@@ -346,12 +373,10 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {location && !activeBooking && (
-          <TouchableOpacity style={styles.recenterBtn} onPress={recenter} activeOpacity={0.8}>
-            <Text style={styles.recenterIcon}>◎</Text>
-          </TouchableOpacity>
+          <RecenterButton onPress={recenter} top={insets.top + 64} />
         )}
 
-        <View style={styles.onlineToggleContainer}>
+        <View style={[styles.onlineToggleContainer, { top: insets.top + 64 }]}>
           <View style={[styles.onlinePill, isOnline && styles.onlinePillActive]}>
             <View style={[styles.onlineDot, isOnline && styles.onlineDotActive]} />
             <Text style={[styles.onlineText, isOnline && styles.onlineTextActive]}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
@@ -360,11 +385,22 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      <View style={styles.bottomSheet}>
-        <View style={styles.grabber}><View style={styles.grabberBar} /></View>
+      {/* BOTTOM SHEET — @gorhom/bottom-sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={handleSheetChange}
+        handleIndicatorStyle={styles.grabber}
+        backgroundStyle={styles.sheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent}>
 
         {activeBooking ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+          <View style={{ paddingBottom: 32 }}>
             <View style={styles.tripHeader}>
               <View style={styles.tripAvatar}>
                 <Text style={styles.tripAvatarText}>{customerName[0]}</Text>
@@ -426,9 +462,9 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.cancelBtnText}>Cancel Trip</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </View>
         ) : pendingBooking ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+          <View style={{ paddingBottom: 32 }}>
             <View style={styles.requestBadge}>
               <View style={styles.requestPulse} />
               <Text style={styles.requestBadgeText}>New Ride Request</Text>
@@ -472,9 +508,9 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
+          </View>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+          <View style={{ paddingBottom: 32 }}>
             <View style={styles.profileCard}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{rider?.name?.[0] || profile?.name?.[0] || 'R'}</Text>
@@ -524,14 +560,15 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.waitingCard}>
                 <Text style={styles.waitingIcon}>🔍</Text>
                 <Text style={styles.waitingText}>Waiting for ride requests...</Text>
-                <Text style={styles.waitingSub}>You'll be notified when a new booking comes in</Text>
+                <Text style={styles.waitingSub}>You will be notified when a new booking comes in</Text>
               </View>
             )}
 
             <View style={{ height: 20 }} />
-          </ScrollView>
+          </View>
         )}
-      </View>
+        </BottomSheetScrollView>
+      </BottomSheet>
       <ModalComponent />
     </View>
   );
@@ -541,23 +578,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   mapContainer: { flex: 1, position: 'relative' },
   map: { ...StyleSheet.absoluteFillObject },
-  topBar: { position: 'absolute', top: 56, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, zIndex: 10 },
+  topBar: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, zIndex: 10 },
   appBadge: { backgroundColor: `${colors.primary}ee`, paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full },
   appBadgeText: { ...typography.labelLg, color: colors.onPrimaryContainer, fontWeight: '700' },
   notifBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: `${colors.surface}ee`, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   notifIcon: { fontSize: 20 },
-  recenterBtn: { position: 'absolute', right: 16, top: 120, width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3, zIndex: 10 },
+  recenterBtn: { position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3, zIndex: 10 },
   recenterIcon: { fontSize: 22, color: colors.onSurface },
-  onlineToggleContainer: { position: 'absolute', top: 120, alignSelf: 'center', zIndex: 10 },
+  onlineToggleContainer: { position: 'absolute', alignSelf: 'center', zIndex: 10 },
   onlinePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: `${colors.surface}ee`, paddingHorizontal: 20, paddingVertical: 10, borderRadius: radius.full, borderWidth: 2, borderColor: colors.outlineVariant, gap: 10 },
   onlinePillActive: { borderColor: '#22c55e', backgroundColor: '#22c55e1a' },
   onlineDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.outline },
   onlineDotActive: { backgroundColor: '#22c55e' },
   onlineText: { ...typography.labelLg, color: colors.onSurfaceVariant, letterSpacing: 1 },
   onlineTextActive: { color: '#22c55e', fontWeight: '700' },
-  bottomSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 25, elevation: 16, zIndex: 20, maxHeight: '55%' },
-  grabber: { alignItems: 'center', paddingVertical: spacing.md },
-  grabberBar: { width: 40, height: 4, backgroundColor: colors.surfaceContainerHighest, borderRadius: 2 },
+  grabber: { backgroundColor: colors.outlineVariant, width: 40 },
+  sheetBackground: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  sheetContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 32 },
 
   profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceContainerLow, marginHorizontal: spacing.lg, padding: spacing.lg, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.outlineVariant, marginBottom: spacing.lg },
   avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryContainer, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },

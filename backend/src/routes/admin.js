@@ -110,7 +110,7 @@ const getRiderDetails = async (req, reply) => {
 const verifyRider = async (req, reply) => {
   try {
     const { id } = req.params;
-    const { status, reason } = req.body;
+    const { status, reason } = req.body || {};
 
     if (!['verified', 'rejected'].includes(status)) {
       return reply.status(400).send({ error: 'Status must be verified or rejected' });
@@ -156,7 +156,7 @@ const verifyRider = async (req, reply) => {
 const suspendRider = async (req, reply) => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason } = req.body || {};
 
     const result = await pool.query(
       `UPDATE riders SET status = 'suspended', is_online = false

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useModal } from '../components/useModal';
 import { useAuth } from '../context/AuthContext';
 import { riderAPI } from '../services/api';
@@ -8,6 +9,7 @@ import { colors, typography, spacing, radius } from '../theme';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { showModal, ModalComponent } = useModal();
   const { rider, logout } = useAuth();
   const [profile, setProfile] = useState(null);
@@ -133,7 +135,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -296,7 +298,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 56 },
+  container: { flex: 1, backgroundColor: colors.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
   heroSection: { alignItems: 'center', marginBottom: spacing.xl, paddingHorizontal: spacing.lg },
   avatarWrapper: { position: 'relative', marginBottom: spacing.lg },

@@ -20,6 +20,11 @@ beforeAll(async () => {
           phone: decoded.phone,
           role: decoded.role,
         };
+        const riderResult = await mockPool.query('SELECT id, status FROM riders WHERE phone = $1 AND is_deleted = false', [decoded.phone]);
+        if (riderResult.rows.length > 0) {
+          req.user.riderId = riderResult.rows[0].id;
+          req.user.riderStatus = riderResult.rows[0].status;
+        }
       } catch (e) {}
     }
   });
@@ -114,12 +119,14 @@ describe('Rider Routes', () => {
   describe('GET /riders/nearby', () => {
     it('should return nearby riders', async () => {
       mockRedisGet.mockResolvedValue(null);
-      mockPool.query.mockResolvedValueOnce({
-        rows: [
-          { id: 'rider-1', name: 'Rider 1', avg_rating: 4.5 },
-          { id: 'rider-2', name: 'Rider 2', avg_rating: 4.2 },
-        ],
-      });
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [
+            { id: 'rider-1', name: 'Rider 1', phone: '256771234567', plate_number: 'UGX 123', current_lat: 2.77, current_lng: 32.29, avg_rating: 4.5, total_trips: 10, selfie_photo: null },
+            { id: 'rider-2', name: 'Rider 2', phone: '256771234568', plate_number: 'UGX 456', current_lat: 2.78, current_lng: 32.30, avg_rating: 4.2, total_trips: 5, selfie_photo: null },
+          ],
+        });
       mockRedisSetEx.mockResolvedValue(1);
 
       const response = await app.inject({
@@ -169,9 +176,9 @@ describe('Rider Routes', () => {
 
   describe('PATCH /riders/:riderId/online', () => {
     it('should toggle rider online status', async () => {
-      mockPool.query.mockResolvedValueOnce({
-        rows: [{ id: 'rider-1', is_online: true }],
-      });
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', is_online: true }] });
 
       const response = await app.inject({
         method: 'PATCH',
@@ -189,6 +196,9 @@ describe('Rider Routes', () => {
     });
 
     it('should return 400 if is_online not boolean', async () => {
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] });
+
       const response = await app.inject({
         method: 'PATCH',
         url: '/riders/rider-1/online',
@@ -238,10 +248,11 @@ describe('Rider Routes', () => {
   describe('GET /riders/:riderId/earnings', () => {
     it('should return rider earnings', async () => {
       mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 'rider-1', status: 'verified' }] })
         .mockResolvedValueOnce({
           rows: [
-            { id: 'booking-1', fare_final: 5000, completed_at: new Date() },
-            { id: 'booking-2', fare_final: 3000, completed_at: new Date() },
+            { id: 'booking-1', fare_final: 5000, completed_at: new Date(), type: 'ride', pickup_address: 'A', dropoff_address: 'B' },
+            { id: 'booking-2', fare_final: 3000, completed_at: new Date(), type: 'ride', pickup_address: 'C', dropoff_address: 'D' },
           ],
         })
         .mockResolvedValueOnce({

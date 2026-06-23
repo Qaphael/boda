@@ -1,21 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useModal } from '../components/useModal';
 import * as Location from 'expo-location';
 import { bookingAPI, riderAPI, profileAPI } from '../services/api';
-import Grabber from '../components/Grabber';
 import { colors, typography, spacing, radius } from '../theme';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const VEHICLE_TYPES = [
   {
@@ -168,7 +170,7 @@ function buildBookingMapHTML(pickup, dropoff) {
             document.getElementById('route-fare').textContent = 'UGX ' + calcFare(route.distance, 'boda').toLocaleString();
             document.getElementById('route-info').style.display = 'flex';
 
-            map.fitBounds(routePolyline.getBounds(), { padding: [40, 40] });
+            map.fitBounds(routePolyline.getBounds(), { paddingBottomRight: L.point(40, 200) });
 
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'route', distance: route.distance, duration: route.duration }));
           }
@@ -203,8 +205,11 @@ function buildBookingMapHTML(pickup, dropoff) {
 
 export default function NewBookingScreen({ route, navigation }) {
   const { showModal, ModalComponent } = useModal();
+  const insets = useSafeAreaInsets();
   const { type } = route.params;
   const webViewRef = useRef(null);
+  const sheetRef = useRef(null);
+  const snapPoints = useMemo(() => ['55%', '90%'], []);
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickupCoords, setPickupCoords] = useState(null);
@@ -224,7 +229,20 @@ export default function NewBookingScreen({ route, navigation }) {
   const [roadDistanceM, setRoadDistanceM] = useState(0);
   const searchTimeout = useRef(null);
 
+  const handleSheetChange = useCallback((index) => {
+    const snapPercents = [0.55, 0.90];
+    const sheetHeight = SCREEN_HEIGHT * (snapPercents[index] ?? 0.55);
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        map.invalidateSize();
+        map.panBy([0, -${Math.round(sheetHeight / 4)}], { animate: false });
+        true;
+      `);
+    }
+  }, []);
+
   useEffect(() => {
+    try { NavigationBar.setStyle('dark'); } catch (e) {}
     getCurrentLocation();
     profileAPI.getSavedPlaces()
       .then(({ data }) => setSavedPlaces(data.places || []))
@@ -242,7 +260,7 @@ export default function NewBookingScreen({ route, navigation }) {
   useEffect(() => {
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.updateFare('${selectedVehicle}');`
+        `window.updateFare('${selectedVehicle}'); true;`
       );
     }
   }, [selectedVehicle]);
@@ -334,7 +352,7 @@ export default function NewBookingScreen({ route, navigation }) {
 
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.updateDropoff(${coords.lat}, ${coords.lng});`
+        `window.updateDropoff(${coords.lat}, ${coords.lng}); true;`
       );
     }
   };
@@ -347,7 +365,7 @@ export default function NewBookingScreen({ route, navigation }) {
     setSearchFocused(false);
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(
-        `window.updateDropoff(${coords.lat}, ${coords.lng});`
+        `window.updateDropoff(${coords.lat}, ${coords.lng}); true;`
       );
     }
   };
@@ -423,17 +441,13 @@ export default function NewBookingScreen({ route, navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
     <View style={styles.container}>
+      {/* MAP — full screen */}
       <View style={styles.mapContainer}>
         <WebView
           ref={webViewRef}
           source={{ html: buildBookingMapHTML(pickupCoords) }}
-          style={styles.map}
+          style={StyleSheet.absoluteFill}
           originWhitelist={['*']}
           javaScriptEnabled={true}
           onMessage={(event) => {
@@ -446,14 +460,24 @@ export default function NewBookingScreen({ route, navigation }) {
           }}
         />
 
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <TouchableOpacity style={[styles.backButton, { top: insets.top + 8 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.bottomSheet, searchFocused && styles.bottomSheetExpanded]}>
-        <Grabber />
-        <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      {/* BOTTOM SHEET — @gorhom/bottom-sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={handleSheetChange}
+        handleIndicatorStyle={styles.grabber}
+        backgroundStyle={styles.sheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.addressSection}>
             <View style={styles.addressCard}>
               <View style={styles.dashedLine} />
@@ -472,7 +496,7 @@ export default function NewBookingScreen({ route, navigation }) {
                 <View style={styles.dropoffDot} />
                 <View style={[styles.addressInputWrapper, styles.dropoffInput]}>
                   <Text style={styles.addressLabel}>Dropoff</Text>
-                  <TextInput
+                  <BottomSheetTextInput
                     style={styles.addressTextInput}
                     value={dropoffAddress}
                     onChangeText={searchLocations}
@@ -596,7 +620,7 @@ export default function NewBookingScreen({ route, navigation }) {
             )}
           </View>
 
-        </ScrollView>
+        </BottomSheetScrollView>
 
         <View style={styles.confirmWrapper}>
           <TouchableOpacity
@@ -614,10 +638,9 @@ export default function NewBookingScreen({ route, navigation }) {
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </BottomSheet>
       <ModalComponent />
     </View>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -634,7 +657,6 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 56,
     left: spacing.lg,
     width: 48,
     height: 48,
@@ -653,20 +675,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.onSurface,
   },
-  bottomSheet: {
-    flex: 1,
+  grabber: {
+    backgroundColor: colors.outlineVariant,
+    width: 40,
+  },
+  sheetBackground: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 30,
-    elevation: 16,
-    overflow: 'hidden',
-  },
-  bottomSheetExpanded: {
-    flex: 3,
   },
   sheetScroll: {
     paddingHorizontal: spacing.lg,

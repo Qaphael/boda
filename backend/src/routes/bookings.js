@@ -95,7 +95,7 @@ const createBooking = async (req, reply) => {
 
     if (payment_method_id) {
       const pm = await pool.query(
-        'SELECT * FROM payment_methods WHERE id = $1 AND user_id = $2',
+        'SELECT * FROM payment_methods WHERE id = $1 AND user_id = $2 AND is_deleted = false',
         [payment_method_id, customerId]
       );
       if (pm.rows.length > 0) {

@@ -96,7 +96,7 @@ const createTicket = async (req, reply) => {
 const updateTicketStatus = async (req, reply) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status } = req.body || {};
 
     const result = await pool.query(
       `UPDATE support_tickets SET status = $1::varchar, updated_at = NOW(),

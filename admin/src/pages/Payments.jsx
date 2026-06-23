@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { adminAPI } from '../services/api';
+import { useAlert } from '../components/AlertModal';
 
 const statusConfig = {
   pending: { label: 'PENDING', class: 'bg-surface-container-highest text-on-surface-variant border border-outline-variant' },
@@ -11,6 +12,7 @@ const statusConfig = {
 };
 
 export default function Payments() {
+  const { showAlert } = useAlert();
   const [payments, setPayments] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +51,7 @@ export default function Payments() {
       setModalType(null);
       loadPayments();
     } catch (err) {
-      alert('Failed to release payment');
+      showAlert({ title: 'Error', message: 'Failed to release payment', type: 'error' });
     }
   };
 
@@ -61,7 +63,7 @@ export default function Payments() {
       setSelectedPayment(null);
       loadPayments();
     } catch (err) {
-      alert('Failed to flag payment');
+      showAlert({ title: 'Error', message: 'Failed to flag payment', type: 'error' });
     }
   };
 
@@ -93,11 +95,11 @@ export default function Payments() {
           <p className="text-body-sm text-on-surface-variant">Monitor, release, and audit transaction lifecycle.</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1 px-3 py-1.5 bg-surface border border-outline-variant rounded hover:bg-surface-container text-label-md transition-colors">
+          <button onClick={loadPayments} className="flex items-center gap-1 px-3 py-1.5 bg-surface border border-outline-variant rounded hover:bg-surface-container text-label-md transition-colors">
             <span className="material-symbols-outlined text-[16px]">download</span>
             Export CSV
           </button>
-          <button className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary rounded hover:opacity-90 text-label-md transition-opacity">
+          <button onClick={loadPayments} className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary rounded hover:opacity-90 text-label-md transition-opacity">
             <span className="material-symbols-outlined text-[16px]">sync</span>
             Reconcile
           </button>

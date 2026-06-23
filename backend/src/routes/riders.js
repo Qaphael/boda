@@ -141,7 +141,7 @@ const getNearbyRiders = async (req, reply) => {
 const updateLocation = async (req, reply) => {
   try {
     const riderId = req.user.riderId;
-    const { lat, lng } = req.body;
+    const { lat, lng } = req.body || {};
 
     if (!riderId) {
       return reply.status(403).send({ error: 'Only riders can update location' });
@@ -189,7 +189,7 @@ const updateLocation = async (req, reply) => {
 const toggleOnline = async (req, reply) => {
   try {
     const riderId = req.user.riderId;
-    const { is_online } = req.body;
+    const { is_online } = req.body || {};
 
     if (!riderId) {
       return reply.status(403).send({ error: 'Only riders can toggle online status' });
@@ -319,7 +319,7 @@ const getRiderEarnings = async (req, reply) => {
 const updateRiderDocuments = async (req, reply) => {
   try {
     const riderId = req.user.riderId;
-    const { id_photo, selfie_photo } = req.body;
+    const { id_photo, selfie_photo } = req.body || {};
 
     if (!riderId) {
       return reply.status(403).send({ error: 'Only riders can update documents' });
@@ -384,7 +384,7 @@ const updateRiderVehicle = async (req, reply) => {
     const riderId = req.user.riderId;
     if (!riderId) return reply.status(403).send({ error: 'Only riders can update vehicle info' });
 
-    const { plate_number, id_photo, selfie_photo } = req.body;
+    const { plate_number, id_photo, selfie_photo } = req.body || {};
 
     const result = await pool.query(
       `UPDATE riders SET
